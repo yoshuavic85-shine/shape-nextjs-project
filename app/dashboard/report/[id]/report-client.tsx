@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
+import { CATEGORY_LABELS } from "@/lib/scoring";
 
 interface ReportClientProps {
   assessmentId: string;
@@ -228,7 +229,7 @@ export function ReportClient({
                   label:
                     profile.spiritualGifts.top.find(
                       (t) => t.category === category,
-                    )?.label || category,
+                    )?.label || CATEGORY_LABELS[category] || category,
                 }),
               )}
               color="#8B6F47"
@@ -241,7 +242,7 @@ export function ReportClient({
                   score: score as number,
                   label:
                     profile.abilities.top.find((t) => t.category === category)
-                      ?.label || category,
+                      ?.label || CATEGORY_LABELS[category] || category,
                 }),
               )}
               color="#6B8E5A"
