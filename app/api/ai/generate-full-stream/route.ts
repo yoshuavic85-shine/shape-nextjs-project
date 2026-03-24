@@ -8,7 +8,7 @@ import type { ShapeProfileData } from "@/types";
 import { Prisma } from "@prisma/client";
 import { AiInsightSchema, CallingProfileSchema } from "@/lib/ai/schemas";
 
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 function sendSSE(
   controller: ReadableStreamDefaultController<Uint8Array>,

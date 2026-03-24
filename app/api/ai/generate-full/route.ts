@@ -9,7 +9,7 @@ import { Prisma } from "@prisma/client";
 import { AiInsightSchema, CallingProfileSchema } from "@/lib/ai/schemas";
 
 /** Allow long-running AI generation. */
-export const maxDuration = 600;
+export const maxDuration = 300;
 
 /** Run full AI analysis + calling in one request (on-demand when user opens report). */
 export async function POST(request: NextRequest) {
