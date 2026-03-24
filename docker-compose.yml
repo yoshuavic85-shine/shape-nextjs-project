@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: shape-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: shape
+      POSTGRES_PASSWORD: shape_password
+      POSTGRES_DB: shape_compass
+    ports:
+      - "5435:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U shape -d shape_compass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: shape-ollama
+    restart: unless-stopped
+    ports:
+      - "11435:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  nextjs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: shape-nextjs
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://shape:shape_password@postgres:5432/shape_compass
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: qwen2:7b
+      JWT_SECRET: shape-compass-production-jwt-secret-change-me
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  ollama_data:
+
+# First-time Ollama: pull model so AI insight works:
+#   docker exec shape-ollama ollama pull qwen2:7b

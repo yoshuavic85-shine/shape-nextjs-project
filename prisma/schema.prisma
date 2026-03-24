@@ -1,0 +1,157 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  LEADER
+  ADMIN
+}
+
+enum AssessmentStatus {
+  IN_PROGRESS
+  COMPLETED
+  ANALYZED
+}
+
+enum ShapeSection {
+  SPIRITUAL_GIFTS
+  HEART
+  ABILITIES
+  PERSONALITY
+  EXPERIENCE
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  passwordHash String
+  role         Role         @default(USER)
+  churchId     String?
+  church       Church?      @relation(fields: [churchId], references: [id])
+  assessments  Assessment[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@index([churchId])
+  @@index([email])
+}
+
+model Church {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  code        String   @unique
+  members     User[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+}
+
+model Assessment {
+  id                String             @id @default(cuid())
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status            AssessmentStatus   @default(IN_PROGRESS)
+  currentSection    ShapeSection       @default(SPIRITUAL_GIFTS)
+  responses         Response[]
+  shapeProfile      ShapeProfile?
+  aiInsight         AiInsight?
+  aiInsightSections AiInsightSection[]
+  callingProfile    CallingProfile?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Question {
+  id         String       @id @default(cuid())
+  section    ShapeSection
+  category   String
+  text       String
+  orderIndex Int
+  responses  Response[]
+
+  @@unique([section, orderIndex])
+  @@index([section])
+}
+
+model Response {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     Question   @relation(fields: [questionId], references: [id])
+  value        Int
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([assessmentId, questionId])
+  @@index([assessmentId])
+}
+
+model ShapeProfile {
+  id             String     @id @default(cuid())
+  assessmentId   String     @unique
+  assessment     Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  spiritualGifts Json
+  heart          Json
+  abilities      Json
+  personality    Json
+  experience     Json
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+}
+
+model AiInsight {
+  id                      String     @id @default(cuid())
+  assessmentId            String     @unique
+  assessment              Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  summary                 String
+  strengths               Json
+  ministryRecommendations Json
+  growthSuggestions       Json
+  reflectionQuestions     Json
+  rawResponse             String
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+}
+
+model AiInsightSection {
+  id           String       @id @default(cuid())
+  assessmentId String
+  assessment   Assessment   @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  section      ShapeSection
+  summary      String
+  strengths    Json
+  rawResponse  String       @default("")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([assessmentId, section])
+  @@index([assessmentId])
+}
+
+model CallingProfile {
+  id                  String     @id @default(cuid())
+  assessmentId        String     @unique
+  assessment          Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  designSummary       String
+  callingClusters     Json
+  environmentalFit    Json
+  lifePatternInsight  String
+  reflectionQuestions Json
+  developmentPath     Json
+  rawResponse         String
+  createdAt           DateTime   @default(now())
+  updatedAt           DateTime   @updatedAt
+}
