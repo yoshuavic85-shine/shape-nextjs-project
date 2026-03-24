@@ -123,7 +123,7 @@ export default function RegisterPage() {
                 placeholder="Masukkan kode gereja"
                 value={churchCode}
                 onChange={(e) => setChurchCode(e.target.value.toUpperCase())}
-                maxLength={6}
+                maxLength={10}
               />
               <p className="text-xs text-muted-foreground">
                 Jika gereja Anda terdaftar, masukkan kode untuk bergabung.

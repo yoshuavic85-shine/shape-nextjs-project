@@ -81,46 +81,33 @@ export async function POST(request: NextRequest) {
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
-        // Phase 1: Analysis
+        // Phase 1 & 2: Menganalisis & Membuat Arah Panggilan secara PARALEL (Chunking)
         sendSSE(controller, {
           phase: "analyze",
           status: "started",
-          progress: 0,
-          label: "Menganalisis profil SHAPE...",
+          progress: 10,
+          label: "AI sedang menyusun Analisis SHAPE dan Arah Panggilan secara bersamaan (Paralel)...",
         });
 
-        const analysisResult = await generateWithRetry(
-          buildAnalysisPrompt(profileData),
-          AiInsightSchema,
-          { maxTokens: 2000 },
-        );
+        // Jalankan kedua request berat secara bersamaan agar waktu selesai 2x lebih cepat
+        const [analysisResult, callingResult] = await Promise.all([
+          generateWithRetry(
+            buildAnalysisPrompt(profileData),
+            AiInsightSchema,
+            { maxTokens: 2000 },
+          ),
+          generateWithRetry(
+            buildCallingPrompt(profileData),
+            CallingProfileSchema,
+            { maxTokens: 2000 },
+          )
+        ]);
 
         sendSSE(controller, {
           phase: "analyze",
           status: "done",
-          progress: 50,
-          label: "Analisis profil selesai.",
-        });
-
-        // Phase 2: Calling
-        sendSSE(controller, {
-          phase: "calling",
-          status: "started",
-          progress: 50,
-          label: "Membuat arah panggilan...",
-        });
-
-        const callingResult = await generateWithRetry(
-          buildCallingPrompt(profileData),
-          CallingProfileSchema,
-          { maxTokens: 2000 },
-        );
-
-        sendSSE(controller, {
-          phase: "calling",
-          status: "done",
-          progress: 90,
-          label: "Arah panggilan selesai.",
+          progress: 80,
+          label: "Semua analisis AI selesai! Menyimpan data...",
         });
 
         // Phase 3: Save to DB
