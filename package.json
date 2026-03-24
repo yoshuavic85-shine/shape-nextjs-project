@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "postinstall": "prisma generate",
-    "build": "prisma generate && npx prisma db push && next build",
+    "build": "prisma generate && npx prisma db push && npx ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' prisma/seed.ts && next build",
     "start": "next start",
     "lint": "eslint",
     "test:ollama": "ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/test-ollama-generate.ts",
