@@ -11,17 +11,28 @@ export default async function ChurchLayout({
   const user = await getCurrentUser();
   if (!user) redirect("/login");
 
-  // Check if user is a church leader
-  if (user.role !== "LEADER") {
-    redirect("/dashboard");
+  // Admin manages churches in the admin panel (create + kode/token)
+  if (user.role === "ADMIN") {
+    redirect("/admin/churches");
   }
 
-  // Check if user has a church
   const church = user.churchId
     ? await db.church.findUnique({ where: { id: user.churchId } })
     : null;
 
+  // No church yet — allow setup flow (USER or LEADER) without church sidebar
   if (!church) {
+    if (user.role !== "LEADER" && user.role !== "USER") {
+      redirect("/dashboard");
+    }
+    return (
+      <div className="flex min-h-screen bg-background">
+        <main className="flex-1 p-6 lg:p-8">{children}</main>
+      </div>
+    );
+  }
+
+  if (user.role !== "LEADER") {
     redirect("/dashboard");
   }
 

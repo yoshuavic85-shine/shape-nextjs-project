@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Settings,
   Activity,
+  FileText,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -26,6 +27,7 @@ const adminLinks = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/users", label: "Manajemen User", icon: Users },
   { href: "/admin/churches", label: "Manajemen Gereja", icon: Church },
+  { href: "/admin/reports", label: "Laporan Assessment", icon: FileText },
   { href: "/admin/analytics", label: "Analitik Sistem", icon: BarChart3 },
   { href: "/admin/activity", label: "Log Aktivitas", icon: Activity },
   { href: "/admin/settings", label: "Pengaturan", icon: Settings },
@@ -44,7 +46,7 @@ export function AdminSidebar({ userName }: AdminSidebarProps) {
   return (
     <aside
       className={cn(
-        "flex flex-col bg-gradient-to-b from-slate-900 to-slate-800 shadow-[4px_0_12px_var(--shadow-dark)] transition-all duration-300 h-screen sticky top-0",
+        "flex flex-col bg-linear-to-b from-slate-900 to-slate-800 shadow-[4px_0_12px_var(--shadow-dark)] transition-all duration-300 h-screen sticky top-0",
         collapsed ? "w-16" : "w-64"
       )}
     >
@@ -85,20 +87,20 @@ export function AdminSidebar({ userName }: AdminSidebarProps) {
                   : "text-slate-300 hover:text-white hover:bg-slate-700/50"
               )}
             >
-              <Icon className="w-5 h-5 flex-shrink-0" />
+              <Icon className="w-5 h-5 shrink-0" />
               {!collapsed && <span>{link.label}</span>}
             </Link>
           );
         })}
 
-        {/* Back to User Dashboard */}
+        {/* Shortcut to church management (token / kode gereja) */}
         <div className="pt-4 border-t border-slate-700/50 mt-4">
           <Link
-            href="/dashboard"
+            href="/admin/churches"
             className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition-all"
           >
-            <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>Dashboard User</span>}
+            <Church className="w-5 h-5 shrink-0" />
+            {!collapsed && <span>Kelola Gereja &amp; Kode</span>}
           </Link>
         </div>
       </nav>
@@ -109,7 +111,7 @@ export function AdminSidebar({ userName }: AdminSidebarProps) {
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:text-red-400 w-full transition-colors cursor-pointer"
         >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
+          <LogOut className="w-5 h-5 shrink-0" />
           {!collapsed && <span>Keluar</span>}
         </button>
         <button

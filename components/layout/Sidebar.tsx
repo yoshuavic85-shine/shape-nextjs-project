@@ -42,7 +42,9 @@ export function Sidebar({ role, currentPath }: SidebarProps) {
   const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
 
-  const isLeader = role === "LEADER" || role === "ADMIN";
+  // Only church leaders with the LEADER role see gereja nav.
+  // ADMIN manages churches via /admin/churches — not /church/*.
+  const isLeader = role === "LEADER";
   const isAdmin = role === "ADMIN";
 
   const handleLogout = async () => {
@@ -93,7 +95,7 @@ export function Sidebar({ role, currentPath }: SidebarProps) {
                   : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
               )}
             >
-              <Icon className="w-5 h-5 flex-shrink-0" />
+              <Icon className="w-5 h-5 shrink-0" />
               {!collapsed && <span>{link.label}</span>}
             </Link>
           );
@@ -123,7 +125,7 @@ export function Sidebar({ role, currentPath }: SidebarProps) {
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/30",
                   )}
                 >
-                  <Icon className="w-5 h-5 flex-shrink-0" />
+                  <Icon className="w-5 h-5 shrink-0" />
                   {!collapsed && <span>{link.label}</span>}
                 </Link>
               );
@@ -150,7 +152,7 @@ export function Sidebar({ role, currentPath }: SidebarProps) {
                   : "text-amber-500 hover:text-amber-400 hover:bg-amber-500/10",
               )}
             >
-              <Shield className="w-5 h-5 flex-shrink-0" />
+              <Shield className="w-5 h-5 shrink-0" />
               {!collapsed && <span>Admin Panel</span>}
             </Link>
           </>
@@ -163,7 +165,7 @@ export function Sidebar({ role, currentPath }: SidebarProps) {
           onClick={handleLogout}
           className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-muted-foreground hover:text-destructive w-full transition-colors cursor-pointer"
         >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
+          <LogOut className="w-5 h-5 shrink-0" />
           {!collapsed && <span>Keluar</span>}
         </button>
         <button

@@ -12,10 +12,16 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/utils";
+import { TOTAL_QUESTION_COUNT } from "@/types";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+
+  // Admin works from the admin panel — not the personal assessment dashboard
+  if (user.role === "ADMIN") {
+    redirect("/admin");
+  }
 
   const assessments = await db.assessment.findMany({
     where: { userId: user.id },
@@ -149,7 +155,10 @@ export default async function DashboardPage() {
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-muted-foreground">
                       <p>Dibuat: {formatDate(assessment.createdAt)}</p>
-                      <p>Jawaban: {assessment._count.responses}/90</p>
+                      <p>
+                        Jawaban: {assessment._count.responses}/
+                        {TOTAL_QUESTION_COUNT}
+                      </p>
                     </div>
                     <div className="flex gap-2">
                       {assessment.status === "IN_PROGRESS" && (

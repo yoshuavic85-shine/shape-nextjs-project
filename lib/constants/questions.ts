@@ -1,573 +1,808 @@
+export type ShapeSectionKey =
+  | "SPIRITUAL_GIFTS"
+  | "HEART"
+  | "ABILITIES"
+  | "PERSONALITY"
+  | "EXPERIENCE";
+
 export interface QuestionDefinition {
-  section:
-    | "SPIRITUAL_GIFTS"
-    | "HEART"
-    | "ABILITIES"
-    | "PERSONALITY"
-    | "EXPERIENCE";
+  section: ShapeSectionKey;
   category: string;
   text: string;
   orderIndex: number;
+  reverseKeyed: boolean;
+  isAttentionCheck: boolean;
 }
 
+interface RawItem {
+  text: string;
+  reverseKeyed?: boolean;
+}
+
+/**
+ * Round-robin interleave items across categories so consecutive questions
+ * rarely share the same construct (reduces response-set inflation).
+ */
+function interleaveSection(
+  section: ShapeSectionKey,
+  byCategory: Record<string, RawItem[]>,
+  attention?: { text: string; expectedValue?: number },
+): QuestionDefinition[] {
+  const categories = Object.keys(byCategory);
+  const maxLen = Math.max(...categories.map((c) => byCategory[c].length));
+  const items: Omit<QuestionDefinition, "orderIndex">[] = [];
+
+  for (let i = 0; i < maxLen; i++) {
+    for (const cat of categories) {
+      const item = byCategory[cat][i];
+      if (!item) continue;
+      items.push({
+        section,
+        category: cat,
+        text: item.text,
+        reverseKeyed: Boolean(item.reverseKeyed),
+        isAttentionCheck: false,
+      });
+    }
+  }
+
+  if (attention) {
+    const mid = Math.floor(items.length / 2);
+    items.splice(mid, 0, {
+      section,
+      category: "ATTENTION",
+      text: attention.text,
+      reverseKeyed: false,
+      isAttentionCheck: true,
+    });
+  }
+
+  return items.map((q, idx) => ({ ...q, orderIndex: idx + 1 }));
+}
+
+const ATTENTION_SG =
+  "Untuk memastikan Anda membaca dengan saksama, pilih angka 2 pada pertanyaan ini.";
+const ATTENTION_HEART =
+  "Pemeriksaan perhatian: silakan pilih angka 4 pada pertanyaan ini.";
+const ATTENTION_ABILITIES =
+  "Ini pemeriksaan kualitas jawaban — pilih angka 1 pada pertanyaan ini.";
+const ATTENTION_PERSONALITY =
+  "Agar hasil akurat, pilih angka 3 (Netral) pada pertanyaan ini.";
+
+// ==========================================
+// SPIRITUAL GIFTS — karunia = dampak rohani / pola pelayanan
+// (dibedakan dari ability teknis & preferensi kepribadian)
+// ==========================================
+const SPIRITUAL_GIFTS: Record<string, RawItem[]> = {
+  TEACHING: [
+    {
+      text: "Ketika saya menjelaskan Firman, orang sering berkata pemahaman mereka menjadi lebih jelas.",
+    },
+    {
+      text: "Saya terdorong menyiapkan pengajaran agar orang lain bertumbuh rohani, bukan hanya menambah pengetahuan.",
+    },
+    {
+      text: "Saya jarang merasa tergerak untuk menjelaskan kebenaran Alkitab kepada orang lain.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya melihat buah nyata ketika orang menerapkan apa yang saya ajarkan dari Firman.",
+    },
+  ],
+  SERVING: [
+    {
+      text: "Saya secara alami melihat kebutuhan praktis di sekitar saya dan ingin memenuhinya.",
+    },
+    {
+      text: "Melayani di belakang layar memberi saya sukacita yang tulus.",
+    },
+    {
+      text: "Saya cenderung menghindari tugas praktis yang tidak terlihat orang lain.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Orang sering mengandalkan saya untuk menyelesaikan kebutuhan operasional pelayanan.",
+    },
+  ],
+  LEADERSHIP: [
+    {
+      text: "Saya dapat menggerakkan orang menuju visi rohani yang jelas.",
+    },
+    {
+      text: "Dalam kelompok, orang naturally menoleh kepada saya untuk arah dan keputusan.",
+    },
+    {
+      text: "Saya merasa tidak nyaman ketika diminta memimpin arah sebuah kelompok.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya membantu orang lain menemukan peran mereka dalam sebuah visi bersama.",
+    },
+  ],
+  GIVING: [
+    {
+      text: "Saya merasa sukacita besar ketika dapat memberi secara murah hati untuk pekerjaan Tuhan.",
+    },
+    {
+      text: "Saya rela menyesuaikan gaya hidup agar bisa memberi lebih untuk kebutuhan orang lain.",
+    },
+    {
+      text: "Saya jarang tergerak untuk memberi secara finansial bagi pelayanan.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya aktif mencari kesempatan untuk mendukung orang atau misi yang membutuhkan.",
+    },
+  ],
+  MERCY: [
+    {
+      text: "Hati saya cepat tergerak melihat orang yang menderita atau tersisih.",
+    },
+    {
+      text: "Saya mudah hadir bagi orang yang kesepian atau terluka emosional.",
+    },
+    {
+      text: "Saya cenderung menjauh ketika berhadapan dengan penderitaan orang lain.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Orang yang sedang sakit atau berduka sering merasa terbantu oleh kehadiran saya.",
+    },
+  ],
+  FAITH: [
+    {
+      text: "Saya percaya Tuhan mampu melakukan hal besar bahkan ketika situasi tampak mustahil.",
+    },
+    {
+      text: "Di tengah ketidakpastian, saya cenderung menguatkan orang lain untuk tetap berharap pada Tuhan.",
+    },
+    {
+      text: "Saya cepat goyah dan kehilangan pengharapan ketika rencana tidak berjalan.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Doa dan keyakinan saya sering menular dan menguatkan iman orang di sekitar saya.",
+    },
+  ],
+  WISDOM: [
+    {
+      text: "Orang sering meminta nasihat saya untuk keputusan hidup yang rumit.",
+    },
+    {
+      text: "Saya dapat melihat situasi dari banyak sisi sebelum memberi saran yang bijak.",
+    },
+    {
+      text: "Saya jarang dimintai pertimbangan untuk keputusan penting orang lain.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Nasihat yang saya berikan biasanya membantu orang mengambil langkah yang lebih sehat.",
+    },
+  ],
+  KNOWLEDGE: [
+    {
+      text: "Saya menikmati mendalami Alkitab secara mendalam dan sistematis.",
+    },
+    {
+      text: "Saya suka menggali konteks historis dan teologis agar Firman dipahami dengan tepat.",
+    },
+    {
+      text: "Saya jarang tertarik mempelajari detail teologis atau latar belakang Alkitab.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya dapat menghubungkan ayat-ayat Alkitab untuk menjelaskan suatu kebenaran secara utuh.",
+    },
+  ],
+  EXHORTATION: [
+    {
+      text: "Saya terdorong menguatkan orang yang putus asa agar mereka bangkit kembali.",
+    },
+    {
+      text: "Saya senang mendampingi seseorang melewati masa sulit dengan kata-kata yang membangun.",
+    },
+    {
+      text: "Saya merasa canggung atau enggan menasihati orang yang sedang down.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Setelah berbicara dengan saya, orang sering merasa lebih termotivasi untuk maju.",
+    },
+  ],
+  EVANGELISM: [
+    {
+      text: "Saya merasa nyaman berbicara tentang iman kepada orang yang belum percaya.",
+    },
+    {
+      text: "Saya aktif mencari kesempatan untuk berbagi Injil dalam percakapan sehari-hari.",
+    },
+    {
+      text: "Saya cenderung menghindari percakapan tentang iman dengan orang di luar gereja.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya melihat buah ketika orang mulai terbuka atau bertanya lebih jauh tentang Kristus karena perjumpaan dengan saya.",
+    },
+  ],
+};
+
+// ==========================================
+// HEART — passion / beban hati (bukan skill)
+// ==========================================
+const HEART: Record<string, RawItem[]> = {
+  EDUCATION: [
+    {
+      text: "Saya punya beban kuat agar orang mendapat akses belajar dan bertumbuh dalam pengetahuan.",
+    },
+    {
+      text: "Ketimpangan pendidikan membuat saya ingin bertindak.",
+    },
+    {
+      text: "Isu pendidikan jarang menggerakkan hati saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya bermimpi melihat komunitas yang melek pengetahuan dan bijak mengambil keputusan.",
+    },
+  ],
+  SOCIAL_JUSTICE: [
+    {
+      text: "Ketidakadilan sosial membuat hati saya tergerak untuk bertindak.",
+    },
+    {
+      text: "Saya tidak bisa diam melihat orang tertindas atau diperlakukan tidak adil.",
+    },
+    {
+      text: "Isu keadilan sosial jarang menjadi perhatian utama saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya ingin menjadi bagian dari solusi bagi mereka yang terpinggirkan.",
+    },
+  ],
+  ARTS: [
+    {
+      text: "Saya merasa hidup ketika ekspresi seni atau kreativitas dipakai untuk menggerakkan hati orang.",
+    },
+    {
+      text: "Musik, tulisan, atau seni visual sangat menggerakkan jiwa saya.",
+    },
+    {
+      text: "Seni dan kreativitas jarang menjadi beban atau passion saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya ingin melihat seni dipakai untuk membangun iman dan harapan.",
+    },
+  ],
+  HEALTH: [
+    {
+      text: "Saya terdorong menolong orang yang sakit atau menghadapi tantangan kesehatan fisik.",
+    },
+    {
+      text: "Isu kesehatan komunitas (gizi, perawatan, akses layanan) penting bagi saya.",
+    },
+    {
+      text: "Kebutuhan kesehatan orang lain jarang menjadi beban hati saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya ingin membawa pemulihan fisik yang nyata bagi orang yang menderita.",
+    },
+  ],
+  FAMILY: [
+    {
+      text: "Penguatan keluarga dan hubungan rumah tangga adalah prioritas hati saya.",
+    },
+    {
+      text: "Saya percaya keluarga yang sehat adalah fondasi masyarakat yang sehat.",
+    },
+    {
+      text: "Isu keluarga jarang menjadi fokus kepedulian saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya ingin melihat lebih banyak keluarga dipulihkan dan dikuatkan.",
+    },
+  ],
+  YOUTH: [
+    {
+      text: "Saya memiliki beban khusus bagi generasi muda.",
+    },
+    {
+      text: "Saya ingin menjadi mentor yang menolong anak muda menemukan arah hidup.",
+    },
+    {
+      text: "Pelayanan kepada pemuda jarang menarik minat saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Masa depan generasi muda sering menjadi isi doa dan kepedulian saya.",
+    },
+  ],
+  MISSIONS: [
+    {
+      text: "Saya bermimpi menjangkau orang dari budaya atau bangsa lain dengan Injil.",
+    },
+    {
+      text: "Saya terdorong mendukung atau terlibat dalam misi lintas budaya.",
+    },
+    {
+      text: "Menjangkau orang di luar konteks budaya saya jarang menjadi beban saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya rela belajar budaya/bahasa lain jika itu membuka pintu untuk menjangkau jiwa.",
+    },
+  ],
+  COMMUNITY: [
+    {
+      text: "Saya ingin membangun komunitas yang saling mendukung dan peduli.",
+    },
+    {
+      text: "Saya senang menjadi jembatan antara orang-orang yang berbeda.",
+    },
+    {
+      text: "Membangun kebersamaan komunitas jarang menjadi prioritas saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya merasa terpanggil menciptakan ruang di mana orang merasa diterima.",
+    },
+  ],
+  TECHNOLOGY: [
+    {
+      text: "Saya melihat teknologi sebagai alat penting untuk memajukan pelayanan dan Kerajaan Allah.",
+    },
+    {
+      text: "Inovasi digital untuk menjangkau orang menggerakkan imajinasi saya.",
+    },
+    {
+      text: "Teknologi dalam pelayanan jarang menarik perhatian saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya ingin melihat gereja memakai teknologi secara bijak untuk dampak yang lebih luas.",
+    },
+  ],
+  ENVIRONMENT: [
+    {
+      text: "Saya peduli tentang penatalayanan bumi dan lingkungan sebagai tanggung jawab iman.",
+    },
+    {
+      text: "Saya merasa bertanggung jawab terhadap ciptaan Tuhan.",
+    },
+    {
+      text: "Isu lingkungan jarang menjadi beban hati rohani saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya ingin komunitas iman lebih aktif menjaga dan memelihara ciptaan.",
+    },
+  ],
+};
+
+// ==========================================
+// ABILITIES — kompetensi / skill yang dapat diamati
+// ==========================================
+const ABILITIES: Record<string, RawItem[]> = {
+  COMMUNICATION: [
+    {
+      text: "Saya dapat menyampaikan ide dengan jelas secara lisan.",
+    },
+    {
+      text: "Saya cukup percaya diri berbicara di depan orang banyak.",
+    },
+    {
+      text: "Saya kesulitan menyampaikan pikiran agar mudah dipahami orang lain.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Orang sering bilang penjelasan saya mudah diikuti.",
+    },
+  ],
+  ORGANIZATION: [
+    {
+      text: "Saya mampu mengatur jadwal, proyek, dan sumber daya dengan baik.",
+    },
+    {
+      text: "Saya detail-oriented dan menjaga ketertiban dalam pekerjaan.",
+    },
+    {
+      text: "Saya sering kesulitan mengorganisir tugas dan prioritas.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Orang mempercayakan saya untuk merapikan proses atau sistem yang kacau.",
+    },
+  ],
+  ANALYTICAL: [
+    {
+      text: "Saya suka memecahkan masalah kompleks secara logis.",
+    },
+    {
+      text: "Saya dapat menganalisis informasi dan menemukan pola.",
+    },
+    {
+      text: "Saya cenderung menghindari soal yang butuh analisis mendalam.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya cepat melihat celah atau inkonsistensi dalam sebuah rencana.",
+    },
+  ],
+  CREATIVE: [
+    {
+      text: "Saya dapat menghasilkan ide-ide kreatif dan inovatif.",
+    },
+    {
+      text: "Saya suka mendesain atau membuat sesuatu yang baru dan bermakna.",
+    },
+    {
+      text: "Saya jarang punya ide kreatif ketika diminta berpikir out of the box.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Orang sering meminta masukan kreatif saya untuk sebuah proyek.",
+    },
+  ],
+  TECHNICAL: [
+    {
+      text: "Saya nyaman bekerja dengan teknologi dan alat digital.",
+    },
+    {
+      text: "Saya dapat memperbaiki, membangun, atau mengoperasikan sesuatu secara teknis.",
+    },
+    {
+      text: "Saya merasa canggung menghadapi perangkat atau sistem teknis.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Orang sering meminta bantuan teknis kepada saya.",
+    },
+  ],
+  INTERPERSONAL: [
+    {
+      text: "Saya mudah membangun hubungan dengan orang baru.",
+    },
+    {
+      text: "Saya peka terhadap perasaan dan kebutuhan orang lain dalam interaksi.",
+    },
+    {
+      text: "Saya kesulitan membaca situasi sosial atau membangun rapport.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Orang merasa nyaman membuka diri kepada saya.",
+    },
+  ],
+  WRITING: [
+    {
+      text: "Saya dapat mengekspresikan pikiran dengan baik melalui tulisan.",
+    },
+    {
+      text: "Saya menikmati proses menulis dan menyempurnakan teks.",
+    },
+    {
+      text: "Menulis adalah hal yang saya hindari atau anggap sulit.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Tulisan saya sering membantu orang memahami suatu gagasan.",
+    },
+  ],
+  MUSICAL: [
+    {
+      text: "Saya memiliki kemampuan musikal (menyanyi atau bermain instrumen).",
+    },
+    {
+      text: "Saya dapat memimpin pujian atau berkontribusi musikal dalam ibadah.",
+    },
+    {
+      text: "Saya tidak memiliki kemampuan atau kenyamanan di bidang musik.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Musik adalah area di mana saya dapat berkontribusi secara nyata.",
+    },
+  ],
+  LEADERSHIP_ABILITY: [
+    {
+      text: "Saya dapat mendelegasikan tugas dan mengarahkan tim secara efektif.",
+    },
+    {
+      text: "Saya mampu membuat keputusan operasional yang menolong tim maju.",
+    },
+    {
+      text: "Saya kesulitan mengarahkan orang atau membagi tanggung jawab.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Dalam proyek, orang mengikuti arahan saya karena hasilnya terasa jelas.",
+    },
+  ],
+  TEACHING_ABILITY: [
+    {
+      text: "Saya dapat menjelaskan konsep sulit dengan cara yang mudah dipahami.",
+    },
+    {
+      text: "Saya sabar membimbing orang yang baru belajar suatu keterampilan.",
+    },
+    {
+      text: "Saya kesulitan menyesuaikan penjelasan dengan tingkat pemahaman orang lain.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Orang sering meminta saya mengajarkan atau melatih mereka.",
+    },
+  ],
+};
+
+// ==========================================
+// PERSONALITY — preferensi bipolar (4 item / kutub)
+// ==========================================
+const PERSONALITY: Record<string, RawItem[]> = {
+  EXTROVERT: [
+    {
+      text: "Saya merasa berenergi setelah menghabiskan waktu dengan banyak orang.",
+    },
+    {
+      text: "Saya suka berbicara dan berdiskusi dalam kelompok.",
+    },
+    {
+      text: "Interaksi sosial yang lama biasanya membuat saya cepat kehabisan energi.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya cenderung memulai percakapan dengan orang yang baru saya kenal.",
+    },
+  ],
+  INTROVERT: [
+    {
+      text: "Saya lebih suka bekerja sendiri daripada dalam kelompok besar.",
+    },
+    {
+      text: "Saya perlu waktu sendiri untuk mengisi ulang energi.",
+    },
+    {
+      text: "Saya jarang membutuhkan waktu sendiri setelah berkumpul dengan orang.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya berpikir lebih jernih dalam suasana yang tenang dan minim distraksi sosial.",
+    },
+  ],
+  TASK: [
+    {
+      text: "Saya fokus menyelesaikan tugas terlebih dahulu sebelum urusan relasi.",
+    },
+    {
+      text: "Saya merasa puas ketika checklist saya selesai.",
+    },
+    {
+      text: "Saya sering menunda tugas demi menjaga suasana hubungan.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Hasil dan pencapaian lebih menggerakkan saya daripada proses sosialisasi.",
+    },
+  ],
+  PEOPLE: [
+    {
+      text: "Hubungan dengan orang lebih penting bagi saya daripada menyelesaikan tugas tepat waktu.",
+    },
+    {
+      text: "Saya memprioritaskan kesejahteraan emosional tim.",
+    },
+    {
+      text: "Saya jarang menyesuaikan rencana hanya karena perasaan orang lain.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya lebih nyaman memastikan orang merasa didengar daripada mengejar target semata.",
+    },
+  ],
+  STRUCTURED: [
+    {
+      text: "Saya suka membuat rencana dan mengikutinya.",
+    },
+    {
+      text: "Saya mengikuti jadwal harian yang teratur.",
+    },
+    {
+      text: "Rencana detail justru membuat saya merasa terkekang.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya merasa lebih aman ketika ada struktur dan prosedur yang jelas.",
+    },
+  ],
+  FLEXIBLE: [
+    {
+      text: "Saya lebih suka fleksibilitas dan spontanitas daripada rencana kaku.",
+    },
+    {
+      text: "Saya mudah beradaptasi ketika rencana berubah mendadak.",
+    },
+    {
+      text: "Perubahan rencana mendadak biasanya membuat saya stres.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya nyaman memutuskan di saat terakhir jika situasi menuntut.",
+    },
+  ],
+  THINKER: [
+    {
+      text: "Saya membuat keputusan terutama berdasarkan logika dan fakta.",
+    },
+    {
+      text: "Saya menganalisis dulu sebelum merespons secara emosional.",
+    },
+    {
+      text: "Saya jarang mengandalkan analisis logis saat mengambil keputusan.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Dalam konflik, saya fokus pada prinsip dan objektivitas.",
+    },
+  ],
+  FEELER: [
+    {
+      text: "Saya membuat keputusan dengan mempertimbangkan dampaknya pada perasaan orang.",
+    },
+    {
+      text: "Nilai dan keharmonisan hubungan sangat memengaruhi keputusan saya.",
+    },
+    {
+      text: "Saya jarang membiarkan perasaan orang memengaruhi keputusan saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Dalam konflik, saya lebih dulu menjaga perasaan orang yang terlibat.",
+    },
+  ],
+  LEADER: [
+    {
+      text: "Saya nyaman mengambil inisiatif dan memimpin arah.",
+    },
+    {
+      text: "Saya secara alami mengambil tanggung jawab dalam situasi baru.",
+    },
+    {
+      text: "Saya lebih suka menunggu orang lain yang memulai.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Ketika ada kekosongan kepemimpinan, saya cenderung melangkah maju.",
+    },
+  ],
+  SUPPORTER: [
+    {
+      text: "Saya lebih suka mendukung orang lain dalam peran mereka.",
+    },
+    {
+      text: "Saya merasa nyaman dan efektif dalam peran pendukung.",
+    },
+    {
+      text: "Berada di peran pendukung membuat saya cepat merasa tidak berguna.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya lebih senang memperkuat pemimpin lain daripada menjadi sorotan utama.",
+    },
+  ],
+};
+
+// ==========================================
+// EXPERIENCE — frekuensi / seberapa membentuk (bukan attitude murni)
+// ==========================================
+const EXPERIENCE: Record<string, RawItem[]> = {
+  SPIRITUAL_EXP: [
+    {
+      text: "Saya mengalami momen spiritual yang secara nyata mengubah arah hidup saya.",
+    },
+    {
+      text: "Saya melihat Tuhan bekerja melalui pelayanan yang saya lakukan.",
+    },
+    {
+      text: "Saya jarang mengalami perjumpaan rohani yang terasa membentuk hidup.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Pengalaman rohani masa lalu masih menjadi fondasi keputusan saya hari ini.",
+    },
+  ],
+  PAINFUL_EXP: [
+    {
+      text: "Pengalaman menyakitkan telah membentuk empati saya terhadap orang lain.",
+    },
+    {
+      text: "Tuhan memakai kegagalan atau luka saya untuk pertumbuhan yang nyata.",
+    },
+    {
+      text: "Saya jarang melihat rasa sakit masa lalu sebagai sesuatu yang membentuk pelayanan saya.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya pernah mengalami pemulihan dari situasi sulit yang memperkuat iman saya.",
+    },
+  ],
+  EDUCATIONAL_EXP: [
+    {
+      text: "Pendidikan formal memperlengkapi saya dengan bekal yang berguna untuk melayani.",
+    },
+    {
+      text: "Pelatihan atau kursus tertentu secara jelas membentuk kemampuan saya.",
+    },
+    {
+      text: "Latar belakang pendidikan saya jarang terasa relevan bagi pelayanan.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Saya memakai pengetahuan dari jalur pendidikan dalam konteks pelayanan.",
+    },
+  ],
+  WORK_EXP: [
+    {
+      text: "Pengalaman kerja mengajarkan keterampilan yang berguna untuk pelayanan.",
+    },
+    {
+      text: "Pengalaman profesional memberi perspektif unik bagi cara saya melayani.",
+    },
+    {
+      text: "Pekerjaan saya jarang memberi bekal yang terasa relevan bagi pelayanan.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Keterampilan dari dunia kerja sering saya pakai untuk menolong gereja/komunitas.",
+    },
+  ],
+  MINISTRY_EXP: [
+    {
+      text: "Saya pernah terlibat secara aktif dalam pelayanan yang bermakna.",
+    },
+    {
+      text: "Saya memiliki pengalaman melayani dalam peran yang jelas di gereja atau komunitas iman.",
+    },
+    {
+      text: "Saya jarang terlibat dalam pelayanan yang berkelanjutan.",
+      reverseKeyed: true,
+    },
+    {
+      text: "Pengalaman pelayanan sebelumnya menolong saya tahu di mana saya efektif.",
+    },
+  ],
+};
+
 export const QUESTIONS: QuestionDefinition[] = [
-  // ==========================================
-  // SPIRITUAL GIFTS (20 questions, 10 categories, 2 each)
-  // ==========================================
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "TEACHING",
-    text: "Saya merasa terdorong untuk menjelaskan kebenaran Firman Tuhan kepada orang lain.",
-    orderIndex: 1,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "TEACHING",
-    text: "Saya suka mempersiapkan materi pembelajaran rohani.",
-    orderIndex: 2,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "SERVING",
-    text: "Saya secara alami melihat kebutuhan praktis dan ingin memenuhinya.",
-    orderIndex: 3,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "SERVING",
-    text: "Saya lebih suka bekerja di belakang layar untuk mendukung pelayanan.",
-    orderIndex: 4,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "LEADERSHIP",
-    text: "Orang sering meminta saya untuk mengambil keputusan dalam kelompok.",
-    orderIndex: 5,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "LEADERSHIP",
-    text: "Saya mampu mengorganisir orang dan sumber daya secara efektif.",
-    orderIndex: 6,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "GIVING",
-    text: "Saya merasa sukacita besar saat memberi kepada orang yang membutuhkan.",
-    orderIndex: 7,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "GIVING",
-    text: "Saya rela berkorban secara finansial untuk pekerjaan Tuhan.",
-    orderIndex: 8,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "MERCY",
-    text: "Hati saya tergerak melihat penderitaan orang lain.",
-    orderIndex: 9,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "MERCY",
-    text: "Saya cepat menyadari ketika seseorang merasa kesepian atau terluka.",
-    orderIndex: 10,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "FAITH",
-    text: "Saya percaya Tuhan mampu melakukan hal-hal besar bahkan saat situasi sulit.",
-    orderIndex: 11,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "FAITH",
-    text: "Saya tetap berharap pada Tuhan di tengah ketidakpastian.",
-    orderIndex: 12,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "WISDOM",
-    text: "Saya sering dimintai nasihat tentang keputusan hidup.",
-    orderIndex: 13,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "WISDOM",
-    text: "Saya dapat melihat situasi dari berbagai perspektif sebelum memberikan saran.",
-    orderIndex: 14,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "KNOWLEDGE",
-    text: "Saya menikmati mempelajari dan mendalami Alkitab.",
-    orderIndex: 15,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "KNOWLEDGE",
-    text: "Saya suka menggali konteks historis dan teologis dalam Alkitab.",
-    orderIndex: 16,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "EXHORTATION",
-    text: "Saya merasa terdorong untuk menguatkan orang yang putus asa.",
-    orderIndex: 17,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "EXHORTATION",
-    text: "Saya merasa terpanggil untuk mendampingi orang melalui masa sulit.",
-    orderIndex: 18,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "EVANGELISM",
-    text: "Saya merasa nyaman berbicara tentang iman saya kepada orang yang belum percaya.",
-    orderIndex: 19,
-  },
-  {
-    section: "SPIRITUAL_GIFTS",
-    category: "EVANGELISM",
-    text: "Saya secara aktif mencari kesempatan untuk berbagi Injil.",
-    orderIndex: 20,
-  },
-
-  // ==========================================
-  // HEART (20 questions, 10 categories, 2 each)
-  // ==========================================
-  {
-    section: "HEART",
-    category: "EDUCATION",
-    text: "Saya sangat peduli tentang pendidikan dan pengembangan pengetahuan.",
-    orderIndex: 1,
-  },
-  {
-    section: "HEART",
-    category: "EDUCATION",
-    text: "Saya senang mengajar atau melatih orang lain.",
-    orderIndex: 2,
-  },
-  {
-    section: "HEART",
-    category: "SOCIAL_JUSTICE",
-    text: "Ketidakadilan sosial membuat hati saya tergerak untuk bertindak.",
-    orderIndex: 3,
-  },
-  {
-    section: "HEART",
-    category: "SOCIAL_JUSTICE",
-    text: "Saya tidak bisa diam melihat orang tertindas.",
-    orderIndex: 4,
-  },
-  {
-    section: "HEART",
-    category: "ARTS",
-    text: "Saya merasa hidup saat mengekspresikan diri melalui seni atau kreativitas.",
-    orderIndex: 5,
-  },
-  {
-    section: "HEART",
-    category: "ARTS",
-    text: "Musik, tulisan, atau seni visual menggerakkan jiwa saya.",
-    orderIndex: 6,
-  },
-  {
-    section: "HEART",
-    category: "HEALTH",
-    text: "Saya terdorong untuk membantu orang yang sakit atau menderita secara fisik.",
-    orderIndex: 7,
-  },
-  {
-    section: "HEART",
-    category: "HEALTH",
-    text: "Saya ingin membawa pemulihan bagi orang yang terluka.",
-    orderIndex: 8,
-  },
-  {
-    section: "HEART",
-    category: "FAMILY",
-    text: "Keluarga dan penguatan hubungan adalah prioritas utama saya.",
-    orderIndex: 9,
-  },
-  {
-    section: "HEART",
-    category: "FAMILY",
-    text: "Saya percaya keluarga kuat adalah fondasi masyarakat.",
-    orderIndex: 10,
-  },
-  {
-    section: "HEART",
-    category: "YOUTH",
-    text: "Saya memiliki beban khusus untuk generasi muda.",
-    orderIndex: 11,
-  },
-  {
-    section: "HEART",
-    category: "YOUTH",
-    text: "Saya ingin menjadi mentor bagi anak muda.",
-    orderIndex: 12,
-  },
-  {
-    section: "HEART",
-    category: "MISSIONS",
-    text: "Saya bermimpi tentang menjangkau budaya dan bangsa lain.",
-    orderIndex: 13,
-  },
-  {
-    section: "HEART",
-    category: "MISSIONS",
-    text: "Saya tertarik dengan budaya dan bahasa lain.",
-    orderIndex: 14,
-  },
-  {
-    section: "HEART",
-    category: "COMMUNITY",
-    text: "Saya ingin membangun komunitas yang saling mendukung.",
-    orderIndex: 15,
-  },
-  {
-    section: "HEART",
-    category: "COMMUNITY",
-    text: "Saya suka membangun jembatan antara orang-orang yang berbeda.",
-    orderIndex: 16,
-  },
-  {
-    section: "HEART",
-    category: "TECHNOLOGY",
-    text: "Saya melihat teknologi sebagai alat untuk memajukan Kerajaan Allah.",
-    orderIndex: 17,
-  },
-  {
-    section: "HEART",
-    category: "TECHNOLOGY",
-    text: "Saya melihat potensi inovasi digital untuk pelayanan.",
-    orderIndex: 18,
-  },
-  {
-    section: "HEART",
-    category: "ENVIRONMENT",
-    text: "Saya peduli tentang penatalayanan bumi dan lingkungan.",
-    orderIndex: 19,
-  },
-  {
-    section: "HEART",
-    category: "ENVIRONMENT",
-    text: "Saya merasa bertanggung jawab terhadap ciptaan Tuhan.",
-    orderIndex: 20,
-  },
-
-  // ==========================================
-  // ABILITIES (20 questions, 10 categories, 2 each)
-  // ==========================================
-  {
-    section: "ABILITIES",
-    category: "COMMUNICATION",
-    text: "Saya dapat menyampaikan ide dengan jelas secara lisan.",
-    orderIndex: 1,
-  },
-  {
-    section: "ABILITIES",
-    category: "COMMUNICATION",
-    text: "Saya seorang pembicara publik yang percaya diri.",
-    orderIndex: 2,
-  },
-  {
-    section: "ABILITIES",
-    category: "ORGANIZATION",
-    text: "Saya mampu mengatur jadwal, proyek, dan sumber daya dengan baik.",
-    orderIndex: 3,
-  },
-  {
-    section: "ABILITIES",
-    category: "ORGANIZATION",
-    text: "Saya detail-oriented dan terorganisir.",
-    orderIndex: 4,
-  },
-  {
-    section: "ABILITIES",
-    category: "ANALYTICAL",
-    text: "Saya suka memecahkan masalah kompleks secara logis.",
-    orderIndex: 5,
-  },
-  {
-    section: "ABILITIES",
-    category: "ANALYTICAL",
-    text: "Saya dapat menganalisis data dan menemukan pola.",
-    orderIndex: 6,
-  },
-  {
-    section: "ABILITIES",
-    category: "CREATIVE",
-    text: "Saya dapat menghasilkan ide-ide kreatif dan inovatif.",
-    orderIndex: 7,
-  },
-  {
-    section: "ABILITIES",
-    category: "CREATIVE",
-    text: "Saya suka mendesain atau membuat sesuatu yang indah.",
-    orderIndex: 8,
-  },
-  {
-    section: "ABILITIES",
-    category: "TECHNICAL",
-    text: "Saya nyaman bekerja dengan teknologi dan alat digital.",
-    orderIndex: 9,
-  },
-  {
-    section: "ABILITIES",
-    category: "TECHNICAL",
-    text: "Saya dapat memperbaiki atau membangun sesuatu secara teknis.",
-    orderIndex: 10,
-  },
-  {
-    section: "ABILITIES",
-    category: "INTERPERSONAL",
-    text: "Saya mudah membangun hubungan dengan orang baru.",
-    orderIndex: 11,
-  },
-  {
-    section: "ABILITIES",
-    category: "INTERPERSONAL",
-    text: "Saya peka terhadap perasaan dan kebutuhan orang lain.",
-    orderIndex: 12,
-  },
-  {
-    section: "ABILITIES",
-    category: "WRITING",
-    text: "Saya dapat mengekspresikan pikiran dengan baik melalui tulisan.",
-    orderIndex: 13,
-  },
-  {
-    section: "ABILITIES",
-    category: "WRITING",
-    text: "Saya menikmati proses menulis dan editing.",
-    orderIndex: 14,
-  },
-  {
-    section: "ABILITIES",
-    category: "MUSICAL",
-    text: "Saya memiliki kemampuan musikal (menyanyi atau bermain instrumen).",
-    orderIndex: 15,
-  },
-  {
-    section: "ABILITIES",
-    category: "MUSICAL",
-    text: "Saya dapat memimpin pujian atau bermain musik.",
-    orderIndex: 16,
-  },
-  {
-    section: "ABILITIES",
-    category: "LEADERSHIP_ABILITY",
-    text: "Orang secara alami mengikuti arahan saya.",
-    orderIndex: 17,
-  },
-  {
-    section: "ABILITIES",
-    category: "LEADERSHIP_ABILITY",
-    text: "Saya dapat mendelegasikan tugas dengan efektif.",
-    orderIndex: 18,
-  },
-  {
-    section: "ABILITIES",
-    category: "TEACHING_ABILITY",
-    text: "Saya dapat menjelaskan konsep sulit dengan cara yang mudah dipahami.",
-    orderIndex: 19,
-  },
-  {
-    section: "ABILITIES",
-    category: "TEACHING_ABILITY",
-    text: "Saya sabar dalam mengajar orang yang baru belajar.",
-    orderIndex: 20,
-  },
-
-  // ==========================================
-  // PERSONALITY (20 questions, 10 categories, 2 each)
-  // ==========================================
-  {
-    section: "PERSONALITY",
-    category: "EXTROVERT",
-    text: "Saya merasa berenergi setelah menghabiskan waktu dengan banyak orang.",
-    orderIndex: 1,
-  },
-  {
-    section: "PERSONALITY",
-    category: "INTROVERT",
-    text: "Saya lebih suka bekerja sendiri daripada dalam kelompok besar.",
-    orderIndex: 2,
-  },
-  {
-    section: "PERSONALITY",
-    category: "TASK",
-    text: "Saya fokus pada menyelesaikan tugas terlebih dahulu.",
-    orderIndex: 3,
-  },
-  {
-    section: "PERSONALITY",
-    category: "PEOPLE",
-    text: "Hubungan dengan orang lebih penting bagi saya daripada menyelesaikan tugas.",
-    orderIndex: 4,
-  },
-  {
-    section: "PERSONALITY",
-    category: "STRUCTURED",
-    text: "Saya suka membuat rencana dan mengikutinya.",
-    orderIndex: 5,
-  },
-  {
-    section: "PERSONALITY",
-    category: "FLEXIBLE",
-    text: "Saya lebih suka fleksibilitas dan spontanitas.",
-    orderIndex: 6,
-  },
-  {
-    section: "PERSONALITY",
-    category: "THINKER",
-    text: "Saya membuat keputusan berdasarkan logika dan fakta.",
-    orderIndex: 7,
-  },
-  {
-    section: "PERSONALITY",
-    category: "FEELER",
-    text: "Saya membuat keputusan berdasarkan nilai dan perasaan.",
-    orderIndex: 8,
-  },
-  {
-    section: "PERSONALITY",
-    category: "LEADER",
-    text: "Saya nyaman mengambil inisiatif dan memimpin.",
-    orderIndex: 9,
-  },
-  {
-    section: "PERSONALITY",
-    category: "SUPPORTER",
-    text: "Saya lebih suka mendukung orang lain dalam peran mereka.",
-    orderIndex: 10,
-  },
-  {
-    section: "PERSONALITY",
-    category: "EXTROVERT",
-    text: "Saya suka berbicara dan berdiskusi dalam kelompok.",
-    orderIndex: 11,
-  },
-  {
-    section: "PERSONALITY",
-    category: "INTROVERT",
-    text: "Saya perlu waktu sendiri untuk mengisi ulang energi.",
-    orderIndex: 12,
-  },
-  {
-    section: "PERSONALITY",
-    category: "TASK",
-    text: "Saya merasa puas saat checklist saya selesai.",
-    orderIndex: 13,
-  },
-  {
-    section: "PERSONALITY",
-    category: "PEOPLE",
-    text: "Saya memprioritaskan kesejahteraan emosional tim.",
-    orderIndex: 14,
-  },
-  {
-    section: "PERSONALITY",
-    category: "STRUCTURED",
-    text: "Saya mengikuti jadwal harian yang teratur.",
-    orderIndex: 15,
-  },
-  {
-    section: "PERSONALITY",
-    category: "FLEXIBLE",
-    text: "Saya mudah beradaptasi dengan perubahan rencana.",
-    orderIndex: 16,
-  },
-  {
-    section: "PERSONALITY",
-    category: "THINKER",
-    text: "Saya menganalisis sebelum merespons secara emosional.",
-    orderIndex: 17,
-  },
-  {
-    section: "PERSONALITY",
-    category: "FEELER",
-    text: "Empati adalah kekuatan utama saya.",
-    orderIndex: 18,
-  },
-  {
-    section: "PERSONALITY",
-    category: "LEADER",
-    text: "Saya secara alami mengambil tanggung jawab dalam situasi baru.",
-    orderIndex: 19,
-  },
-  {
-    section: "PERSONALITY",
-    category: "SUPPORTER",
-    text: "Saya merasa nyaman dalam peran pendukung.",
-    orderIndex: 20,
-  },
-
-  // ==========================================
-  // EXPERIENCE (10 questions, 5 categories, 2 each)
-  // ==========================================
-  {
-    section: "EXPERIENCE",
-    category: "SPIRITUAL_EXP",
-    text: "Saya pernah mengalami momen spiritual yang mengubah hidup saya.",
-    orderIndex: 1,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "SPIRITUAL_EXP",
-    text: "Saya pernah melihat Tuhan bekerja melalui pelayanan yang saya lakukan.",
-    orderIndex: 2,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "PAINFUL_EXP",
-    text: "Pengalaman menyakitkan dalam hidup saya telah membentuk empati saya.",
-    orderIndex: 3,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "PAINFUL_EXP",
-    text: "Tuhan telah menggunakan kegagalan saya untuk pertumbuhan.",
-    orderIndex: 4,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "EDUCATIONAL_EXP",
-    text: "Pendidikan formal saya telah memperlengkapi saya untuk melayani.",
-    orderIndex: 5,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "EDUCATIONAL_EXP",
-    text: "Pelatihan atau kursus tertentu telah membentuk kemampuan saya.",
-    orderIndex: 6,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "WORK_EXP",
-    text: "Pengalaman kerja saya telah mengajarkan keterampilan yang berguna untuk pelayanan.",
-    orderIndex: 7,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "WORK_EXP",
-    text: "Pengalaman profesional memberikan perspektif unik bagi pelayanan saya.",
-    orderIndex: 8,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "MINISTRY_EXP",
-    text: "Saya pernah terlibat dalam pelayanan yang bermakna.",
-    orderIndex: 9,
-  },
-  {
-    section: "EXPERIENCE",
-    category: "MINISTRY_EXP",
-    text: "Saya pernah mengalami pemulihan dari situasi sulit yang memperkuat iman saya.",
-    orderIndex: 10,
-  },
+  ...interleaveSection("SPIRITUAL_GIFTS", SPIRITUAL_GIFTS, {
+    text: ATTENTION_SG,
+  }),
+  ...interleaveSection("HEART", HEART, { text: ATTENTION_HEART }),
+  ...interleaveSection("ABILITIES", ABILITIES, { text: ATTENTION_ABILITIES }),
+  ...interleaveSection("PERSONALITY", PERSONALITY, {
+    text: ATTENTION_PERSONALITY,
+  }),
+  ...interleaveSection("EXPERIENCE", EXPERIENCE),
 ];
+
+/** Expected Likert value for attention items (parsed from instructional text). */
+export const ATTENTION_EXPECTED: Record<string, number> = {
+  [ATTENTION_SG]: 2,
+  [ATTENTION_HEART]: 4,
+  [ATTENTION_ABILITIES]: 1,
+  [ATTENTION_PERSONALITY]: 3,
+};
+
+export function countQuestionsBySection(): Record<ShapeSectionKey, number> {
+  const counts: Record<ShapeSectionKey, number> = {
+    SPIRITUAL_GIFTS: 0,
+    HEART: 0,
+    ABILITIES: 0,
+    PERSONALITY: 0,
+    EXPERIENCE: 0,
+  };
+  for (const q of QUESTIONS) counts[q.section]++;
+  return counts;
+}

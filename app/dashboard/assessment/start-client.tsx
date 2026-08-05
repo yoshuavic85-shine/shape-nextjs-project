@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { SECTION_CONFIGS } from "@/types";
+import { SECTION_CONFIGS, TOTAL_QUESTION_COUNT } from "@/types";
 import {
   Loader2,
   Sparkles,
@@ -26,16 +26,20 @@ const ICONS: Record<string, React.ElementType> = {
 export function AssessmentStartClient() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleStart = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch("/api/assessment", { method: "POST" });
-      const data = await res.json();
-      if (res.ok) {
-        router.push(`/dashboard/assessment/${data.assessment.id}`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Gagal memulai assessment");
       }
-    } catch {
+      router.push(`/dashboard/assessment/${data.assessment.id}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
       setLoading(false);
     }
   };
@@ -47,8 +51,14 @@ export function AssessmentStartClient() {
           Assessment SHAPE
         </h1>
         <p className="text-muted-foreground">
-          Jawab 90 pertanyaan untuk memahami desain unik Anda. Assessment
-          terdiri dari 5 bagian.
+          Jawab {TOTAL_QUESTION_COUNT} pertanyaan untuk merefleksikan desain
+          pelayanan Anda. Assessment terdiri dari 5 bagian (instrumen v2 dengan
+          item yang lebih lengkap dan pemeriksaan kualitas jawaban).
+        </p>
+        <p className="text-xs text-muted-foreground mt-3 max-w-xl mx-auto leading-relaxed">
+          Hasil bersifat reflektif untuk discovery pelayanan — bukan diagnosis
+          psikologis. Estimasi waktu: 35–50 menit. Setiap jawaban tersimpan
+          otomatis; progress juga disimpan per bagian.
         </p>
       </div>
 
@@ -58,7 +68,7 @@ export function AssessmentStartClient() {
           return (
             <Card key={section.key}>
               <CardContent className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                   <Icon className="w-6 h-6 text-primary" />
                 </div>
                 <div className="flex-1">
@@ -76,6 +86,11 @@ export function AssessmentStartClient() {
       </div>
 
       <div className="text-center">
+        {error && (
+          <div className="mb-4 p-3 rounded-xl bg-destructive/10 text-destructive text-sm">
+            {error}
+          </div>
+        )}
         <Button
           size="lg"
           onClick={handleStart}
@@ -90,7 +105,8 @@ export function AssessmentStartClient() {
           Mulai Assessment
         </Button>
         <p className="text-xs text-muted-foreground mt-3">
-          Progress Anda akan tersimpan otomatis di setiap bagian.
+          Jawaban tersimpan otomatis. Anda dapat meninggalkan halaman dan
+          melanjutkan nanti.
         </p>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { generateWithRetry } from "@/lib/ai/ollama";
 import { buildAnalysisPrompt } from "@/lib/ai/analysis-prompt";
 import { buildCallingPrompt } from "@/lib/ai/calling-prompt";
-import type { ShapeProfileData } from "@/types";
+import { toShapeProfileData } from "@/lib/profile-mapper";
 import { Prisma } from "@prisma/client";
 import { AiInsightSchema, CallingProfileSchema } from "@/lib/ai/schemas";
 
@@ -55,8 +55,15 @@ export async function POST(request: NextRequest) {
   }
 
   const assessment = await db.assessment.findFirst({
-    where: { id: assessmentId, userId: user.id },
-    include: { shapeProfile: true },
+    where:
+      user.role === "ADMIN"
+        ? { id: assessmentId }
+        : { id: assessmentId, userId: user.id },
+    include: {
+      shapeProfile: true,
+      aiInsight: true,
+      callingProfile: true,
+    },
   });
 
   if (!assessment) {
@@ -76,11 +83,40 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const profileData = assessment.shapeProfile as unknown as ShapeProfileData;
+  const profileData = toShapeProfileData(assessment.shapeProfile);
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       try {
+        // Idempotent: return existing insights if already generated
+        if (assessment.aiInsight && assessment.callingProfile) {
+          sendSSE(controller, {
+            phase: "done",
+            progress: 100,
+            label: "Analisis sudah tersedia.",
+            aiInsight: {
+              summary: assessment.aiInsight.summary,
+              strengths: assessment.aiInsight.strengths,
+              ministryRecommendations:
+                assessment.aiInsight.ministryRecommendations,
+              growthSuggestions: assessment.aiInsight.growthSuggestions,
+              reflectionQuestions: assessment.aiInsight.reflectionQuestions,
+            },
+            callingProfile: {
+              designSummary: assessment.callingProfile.designSummary,
+              callingClusters: assessment.callingProfile.callingClusters,
+              environmentalFit: assessment.callingProfile.environmentalFit,
+              lifePatternInsight:
+                assessment.callingProfile.lifePatternInsight,
+              reflectionQuestions:
+                assessment.callingProfile.reflectionQuestions,
+              developmentPath: assessment.callingProfile.developmentPath,
+            },
+          });
+          controller.close();
+          return;
+        }
+
         // Phase 1 & 2: Menganalisis & Membuat Arah Panggilan secara PARALEL (Chunking)
         sendSSE(controller, {
           phase: "analyze",

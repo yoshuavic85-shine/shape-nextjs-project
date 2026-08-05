@@ -5,10 +5,14 @@
   "scripts": {
     "dev": "next dev",
     "postinstall": "prisma generate",
-    "build": "prisma generate && npx prisma db push && npx ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' prisma/seed.ts && next build",
+    "build": "prisma generate && next build",
+    "build:full": "prisma generate && npx prisma db push && npx ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' prisma/seed.ts && next build",
+    "db:push": "prisma db push",
+    "db:seed": "ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' prisma/seed.ts",
     "start": "next start",
     "lint": "eslint",
     "test:ollama": "ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/test-ollama-generate.ts",
+    "test:scoring": "ts-node --compiler-options '{\"module\":\"CommonJS\",\"moduleResolution\":\"node\"}' scripts/test-scoring.ts",
     "test:ollama:docker": "DATABASE_URL=postgresql://shape:shape_password@localhost:5435/shape_compass OLLAMA_BASE_URL=http://localhost:11435 npm run test:ollama"
   },
   "dependencies": {

@@ -229,10 +229,10 @@ export default async function AdminDashboardPage() {
             Assessment Terbaru
           </CardTitle>
           <Link
-            href="/admin/analytics"
+            href="/admin/reports"
             className="text-sm text-primary hover:underline"
           >
-            Lihat Analitik
+            Semua Laporan
           </Link>
         </CardHeader>
         <CardContent>
@@ -248,6 +248,9 @@ export default async function AdminDashboardPage() {
                   </th>
                   <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
                     Tanggal
+                  </th>
+                  <th className="text-left py-3 px-2 text-sm font-medium text-muted-foreground">
+                    Aksi
                   </th>
                 </tr>
               </thead>
@@ -278,6 +281,18 @@ export default async function AdminDashboardPage() {
                     </td>
                     <td className="py-3 px-2 text-sm text-muted-foreground">
                       {new Date(a.createdAt).toLocaleDateString("id-ID")}
+                    </td>
+                    <td className="py-3 px-2">
+                      {a.status !== "IN_PROGRESS" ? (
+                        <Link
+                          href={`/admin/reports/${a.id}`}
+                          className="text-sm text-primary hover:underline"
+                        >
+                          Lihat
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                   </tr>
                 ))}

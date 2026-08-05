@@ -7,9 +7,10 @@ import { formatDate, getInitials } from "@/lib/utils";
 
 export default async function ChurchMembersPage() {
   const user = await getCurrentUser();
-  if (!user || user.role !== "LEADER" || !user.churchId) {
-    redirect("/dashboard");
-  }
+  if (!user) redirect("/login");
+  if (user.role === "ADMIN") redirect("/admin/churches");
+  if (user.role !== "LEADER") redirect("/dashboard");
+  if (!user.churchId) redirect("/church/setup");
 
   const members = await db.user.findMany({
     where: { churchId: user.churchId },

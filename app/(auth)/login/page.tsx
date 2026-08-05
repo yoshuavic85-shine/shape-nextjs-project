@@ -45,6 +45,13 @@ export default function LoginPage() {
       // Redirect based on user role
       if (data.user?.role === "ADMIN") {
         window.location.href = "/admin";
+      } else if (
+        data.user?.role === "LEADER" &&
+        !data.user?.churchId
+      ) {
+        window.location.href = "/church/setup";
+      } else if (data.user?.role === "LEADER") {
+        window.location.href = "/church/dashboard";
       } else {
         window.location.href = "/dashboard";
       }

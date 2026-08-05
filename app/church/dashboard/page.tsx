@@ -6,9 +6,10 @@ import { Users, ClipboardCheck, Church, Key } from "lucide-react";
 
 export default async function ChurchDashboardPage() {
   const user = await getCurrentUser();
-  if (!user || user.role !== "LEADER" || !user.churchId) {
-    redirect("/dashboard");
-  }
+  if (!user) redirect("/login");
+  if (user.role === "ADMIN") redirect("/admin/churches");
+  if (user.role !== "LEADER") redirect("/dashboard");
+  if (!user.churchId) redirect("/church/setup");
 
   const church = await db.church.findUnique({
     where: { id: user.churchId },

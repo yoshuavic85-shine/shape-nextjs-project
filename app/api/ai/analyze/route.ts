@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateWithRetry } from "@/lib/ai/ollama";
 import { buildAnalysisPrompt } from "@/lib/ai/analysis-prompt";
-import { ShapeProfileData } from "@/types";
+import { toShapeProfileData } from "@/lib/profile-mapper";
 import { AiInsightSchema } from "@/lib/ai/schemas";
 
 export async function POST(request: NextRequest) {
@@ -45,18 +45,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const profileData: ShapeProfileData = {
-      spiritualGifts: assessment.shapeProfile
-        .spiritualGifts as unknown as ShapeProfileData["spiritualGifts"],
-      heart: assessment.shapeProfile
-        .heart as unknown as ShapeProfileData["heart"],
-      abilities: assessment.shapeProfile
-        .abilities as unknown as ShapeProfileData["abilities"],
-      personality: assessment.shapeProfile
-        .personality as unknown as ShapeProfileData["personality"],
-      experience: assessment.shapeProfile
-        .experience as unknown as ShapeProfileData["experience"],
-    };
+    const profileData = toShapeProfileData(assessment.shapeProfile);
 
     const prompt = buildAnalysisPrompt(profileData);
     const { data: validated, rawResponse } = await generateWithRetry(

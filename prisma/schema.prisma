@@ -74,12 +74,14 @@ model Assessment {
 }
 
 model Question {
-  id         String       @id @default(cuid())
-  section    ShapeSection
-  category   String
-  text       String
-  orderIndex Int
-  responses  Response[]
+  id               String       @id @default(cuid())
+  section          ShapeSection
+  category         String
+  text             String
+  orderIndex       Int
+  reverseKeyed     Boolean      @default(false)
+  isAttentionCheck Boolean      @default(false)
+  responses        Response[]
 
   @@unique([section, orderIndex])
   @@index([section])
@@ -108,6 +110,7 @@ model ShapeProfile {
   abilities      Json
   personality    Json
   experience     Json
+  quality        Json?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 }

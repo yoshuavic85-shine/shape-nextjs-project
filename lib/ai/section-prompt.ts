@@ -24,7 +24,8 @@ ${dataJson}
 ATURAN:
 - Gunakan nada hangat dan mendorong.
 - Gunakan frasa seperti "tampaknya", "berdasarkan assessment ini".
-- Jangan klaim wahyu atau prediksi masa depan.
+- Jangan klaim wahyu, prediksi masa depan, atau diagnosis klinis.
+- Ranking bersifat relatif (ipsative) dalam diri orang ini.
 - Output HARUS JSON valid saja, tanpa teks di luar JSON.
 
 Berikan dalam format JSON (Bahasa Indonesia):

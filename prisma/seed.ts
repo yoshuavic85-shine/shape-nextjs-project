@@ -7,10 +7,10 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding database...");
 
-  // Clear existing questions
+  // Instrument v2: clear dependent rows then rebuild question bank
+  await prisma.response.deleteMany();
   await prisma.question.deleteMany();
 
-  // Seed questions
   for (const q of QUESTIONS) {
     await prisma.question.create({
       data: {
@@ -18,13 +18,14 @@ async function main() {
         category: q.category,
         text: q.text,
         orderIndex: q.orderIndex,
+        reverseKeyed: q.reverseKeyed,
+        isAttentionCheck: q.isAttentionCheck,
       },
     });
   }
 
-  console.log(`Seeded ${QUESTIONS.length} questions successfully.`);
+  console.log(`Seeded ${QUESTIONS.length} questions (instrument v2).`);
 
-  // Create admin user
   const adminEmail = "admin@shapecompass.id";
   const existing = await prisma.user.findUnique({
     where: { email: adminEmail },

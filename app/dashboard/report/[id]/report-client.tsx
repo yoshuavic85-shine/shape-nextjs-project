@@ -1,13 +1,22 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { ShapeProfileData, AiInsightData, CallingProfileData } from "@/types";
+import {
+  ShapeProfileData,
+  AiInsightData,
+  CallingProfileData,
+  ShapeSection,
+  getSectionTitle,
+} from "@/types";
+import { CATEGORY_LABELS } from "@/lib/constants/category-labels";
 import { ShapeRadarChart } from "@/components/profile/ShapeRadarChart";
 import { GiftCard } from "@/components/profile/GiftCard";
 import { PersonalityChart } from "@/components/profile/PersonalityChart";
 import { CallingInsight } from "@/components/profile/CallingInsight";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 import {
   Loader2,
   Brain,
@@ -20,14 +29,17 @@ import {
   HelpCircle,
   CheckCircle2,
   XCircle,
+  ShieldAlert,
 } from "lucide-react";
-import { CATEGORY_LABELS } from "@/lib/scoring";
 
 interface ReportClientProps {
   assessmentId: string;
   profile: ShapeProfileData | null;
   aiInsight: AiInsightData | null;
   callingProfile: CallingProfileData | null;
+  /** When false, do not auto-start AI generation (e.g. admin viewing). */
+  autoGenerate?: boolean;
+  subjectName?: string | null;
 }
 
 export function ReportClient({
@@ -35,7 +47,10 @@ export function ReportClient({
   profile,
   aiInsight,
   callingProfile,
+  autoGenerate = true,
+  subjectName,
 }: ReportClientProps) {
+  const router = useRouter();
   const [insight, setInsight] = useState<AiInsightData | null>(aiInsight);
   const [calling, setCalling] = useState<CallingProfileData | null>(
     callingProfile,
@@ -135,6 +150,7 @@ export function ReportClient({
 
   useEffect(() => {
     if (
+      autoGenerate &&
       profile &&
       (!insight || !calling) &&
       !loadingAI &&
@@ -144,7 +160,7 @@ export function ReportClient({
       runGenerateFull();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assessmentId, profile]);
+  }, [assessmentId, profile, autoGenerate]);
 
   if (!profile) {
     return (
@@ -152,7 +168,12 @@ export function ReportClient({
         <h2 className="text-2xl font-bold text-foreground mb-4">
           Profil sedang dihitung...
         </h2>
-        <p className="text-muted-foreground">Silakan refresh halaman ini.</p>
+        <p className="text-muted-foreground mb-4">
+          Jika tidak muncul dalam beberapa detik, muat ulang halaman.
+        </p>
+        <Button type="button" onClick={() => router.refresh()}>
+          Muat ulang
+        </Button>
       </div>
     );
   }
@@ -166,12 +187,58 @@ export function ReportClient({
     <div className="max-w-5xl mx-auto">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-foreground">
-          Laporan SHAPE Anda
+          {subjectName
+            ? `Laporan SHAPE — ${subjectName}`
+            : "Laporan SHAPE Anda"}
         </h1>
         <p className="text-muted-foreground mt-1">
-          Hasil assessment SHAPE yang menunjukkan desain unik Anda.
+          Ringkasan reflektif desain pelayanan (instrumen v2) — ranking relatif
+          dalam diri, bukan prediksi absolut.
         </p>
       </div>
+
+      {profile.quality && (
+        <div className="mb-6 p-4 rounded-2xl border border-border bg-muted/30">
+          <div className="flex items-start gap-3">
+            <ShieldAlert className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+            <div className="space-y-2 text-sm">
+              <p className="font-medium text-foreground">
+                Kualitas hasil:{" "}
+                {profile.quality.overallConfidence === "high"
+                  ? "Tinggi"
+                  : profile.quality.overallConfidence === "moderate"
+                    ? "Sedang"
+                    : "Rendah"}
+                {!profile.quality.attentionPassed &&
+                  " — beberapa pemeriksaan perhatian gagal"}
+                {profile.quality.acquiescenceFlag &&
+                  " — indikasi jawaban cenderung setuju-semua"}
+              </p>
+              {!profile.quality.attentionPassed &&
+                profile.quality.attentionFailures.length > 0 && (
+                  <p className="text-muted-foreground">
+                    Pemeriksaan perhatian gagal di:{" "}
+                    {profile.quality.attentionFailures
+                      .map((s) => getSectionTitle(s as ShapeSection))
+                      .join(", ")}
+                    . Pertimbangkan meninjau ulang bagian tersebut bersama
+                    mentor.
+                  </p>
+                )}
+              <p className="text-muted-foreground leading-relaxed">
+                {profile.quality.disclaimer}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!profile.quality && (
+        <div className="mb-6 p-4 rounded-2xl border border-border bg-muted/30 text-sm text-muted-foreground leading-relaxed">
+          Hasil ini adalah alat refleksi dan discovery pelayanan, bukan
+          diagnosis psikologis. Interpretasikan bersama mentor/pemimpin rohani.
+        </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="flex gap-2 mb-8 overflow-x-auto">
@@ -229,11 +296,28 @@ export function ReportClient({
                   label:
                     profile.spiritualGifts.top.find(
                       (t) => t.category === category,
-                    )?.label || CATEGORY_LABELS[category] || category,
+                    )?.label ||
+                    CATEGORY_LABELS[category] ||
+                    category,
                 }),
               )}
               color="#8B6F47"
-              title="Karunia Rohani"
+              title="Karunia Rohani (relatif)"
+            />
+            <ShapeRadarChart
+              data={Object.entries(profile.heart.scores).map(
+                ([category, score]) => ({
+                  category,
+                  score: score as number,
+                  label:
+                    profile.heart.top.find((t) => t.category === category)
+                      ?.label ||
+                    CATEGORY_LABELS[category] ||
+                    category,
+                }),
+              )}
+              color="#C4956A"
+              title="Hati / Passion (relatif)"
             />
             <ShapeRadarChart
               data={Object.entries(profile.abilities.scores).map(
@@ -242,11 +326,13 @@ export function ReportClient({
                   score: score as number,
                   label:
                     profile.abilities.top.find((t) => t.category === category)
-                      ?.label || CATEGORY_LABELS[category] || category,
+                      ?.label ||
+                    CATEGORY_LABELS[category] ||
+                    category,
                 }),
               )}
               color="#6B8E5A"
-              title="Kemampuan"
+              title="Kemampuan (relatif)"
             />
           </div>
 
@@ -430,15 +516,17 @@ export function ReportClient({
                     </h3>
                     <p className="text-muted-foreground mb-4">
                       {error ||
-                        "Ringkasan kekuatan dan rekomendasi akan muncul di sini setelah selesai."}
+                        (autoGenerate
+                          ? "Ringkasan kekuatan dan rekomendasi akan muncul di sini setelah selesai."
+                          : "Analisis AI belum dibuat untuk assessment ini.")}
                     </p>
-                    {error && (
+                    {(error || !autoGenerate) && (
                       <button
                         type="button"
                         onClick={() => runGenerateFull()}
                         className="text-sm font-medium text-primary underline hover:no-underline"
                       >
-                        Coba lagi
+                        {error ? "Coba lagi" : "Hasilkan analisis AI"}
                       </button>
                     )}
                   </>

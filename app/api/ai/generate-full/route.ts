@@ -4,7 +4,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { generateWithRetry } from "@/lib/ai/ollama";
 import { buildAnalysisPrompt } from "@/lib/ai/analysis-prompt";
 import { buildCallingPrompt } from "@/lib/ai/calling-prompt";
-import type { ShapeProfileData } from "@/types";
+import { toShapeProfileData } from "@/lib/profile-mapper";
 import { Prisma } from "@prisma/client";
 import { AiInsightSchema, CallingProfileSchema } from "@/lib/ai/schemas";
 
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const profileData = assessment.shapeProfile as unknown as ShapeProfileData;
+    const profileData = toShapeProfileData(assessment.shapeProfile);
 
     const [analysisResult, callingResult] = await Promise.all([
       generateWithRetry(buildAnalysisPrompt(profileData), AiInsightSchema, {

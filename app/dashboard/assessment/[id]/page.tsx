@@ -47,6 +47,8 @@ export default async function AssessmentDetailPage({
           category: q.category,
           text: q.text,
           orderIndex: q.orderIndex,
+          reverseKeyed: q.reverseKeyed,
+          isAttentionCheck: q.isAttentionCheck,
         }))}
         currentSection={assessment.currentSection as ShapeSection}
         existingResponses={existingResponses}

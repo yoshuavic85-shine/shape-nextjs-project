@@ -1,78 +1,43 @@
 import { db } from "@/lib/db";
-import { calculateShapeProfile, getSectionProfileData } from "@/lib/scoring";
 import { generateWithRetry } from "@/lib/ai/ollama";
-import { buildSectionInsightPrompt } from "@/lib/ai/section-prompt";
 import { buildAnalysisPrompt } from "@/lib/ai/analysis-prompt";
 import { buildCallingPrompt } from "@/lib/ai/calling-prompt";
-import { ShapeSection } from "@/types";
-import type { ShapeProfileData } from "@/types";
 import { Prisma } from "@prisma/client";
-import {
-  AiInsightSchema,
-  CallingProfileSchema,
-  SectionInsightSchema,
-} from "@/lib/ai/schemas";
+import { AiInsightSchema, CallingProfileSchema } from "@/lib/ai/schemas";
+import { toShapeProfileData } from "@/lib/profile-mapper";
 
-/** Run section-specific AI insight in background (after each section submit). */
-export async function runSectionInsight(
-  assessmentId: string,
-  section: ShapeSection,
-): Promise<void> {
-  try {
-    const assessment = await db.assessment.findUnique({
-      where: { id: assessmentId },
-      include: {
-        responses: { include: { question: true } },
-      },
-    });
-    if (!assessment || assessment.responses.length === 0) return;
-
-    const profile = calculateShapeProfile(assessment.responses);
-    const sectionData = getSectionProfileData(profile, section);
-    if (!sectionData) return;
-
-    const prompt = buildSectionInsightPrompt(section, sectionData);
-    const { data: parsed, rawResponse } = await generateWithRetry(
-      prompt,
-      SectionInsightSchema,
-      { maxTokens: 800 },
-    );
-
-    await db.aiInsightSection.upsert({
-      where: {
-        assessmentId_section: { assessmentId, section },
-      },
-      update: {
-        summary: parsed.summary,
-        strengths: parsed.strengths as unknown as Prisma.InputJsonValue,
-        rawResponse,
-      },
-      create: {
-        assessmentId,
-        section,
-        summary: parsed.summary,
-        strengths: parsed.strengths as unknown as Prisma.InputJsonValue,
-        rawResponse,
-      },
-    });
-  } catch (err) {
-    console.error("[runSectionInsight]", assessmentId, section, err);
-  }
-}
-
-/** Run full AI analysis + calling in background (after assessment COMPLETED). */
+/**
+ * Full AI analysis + calling (non-streaming).
+ * Prefer /api/ai/generate-full-stream for user-facing progress.
+ * Kept for admin/ops recompute without SSE.
+ */
 export async function runFullAnalysis(assessmentId: string): Promise<void> {
   try {
     const assessment = await db.assessment.findFirst({
       where: { id: assessmentId },
-      include: { shapeProfile: true },
+      include: {
+        shapeProfile: true,
+        aiInsight: true,
+        callingProfile: true,
+      },
     });
     if (!assessment?.shapeProfile) {
       console.warn("[runFullAnalysis] No shapeProfile for", assessmentId);
       return;
     }
 
-    const profileData = assessment.shapeProfile as unknown as ShapeProfileData;
+    // Skip if already complete (idempotent)
+    if (assessment.aiInsight && assessment.callingProfile) {
+      if (assessment.status !== "ANALYZED") {
+        await db.assessment.update({
+          where: { id: assessmentId },
+          data: { status: "ANALYZED" },
+        });
+      }
+      return;
+    }
+
+    const profileData = toShapeProfileData(assessment.shapeProfile);
 
     const [analysisResult, callingResult] = await Promise.all([
       generateWithRetry(buildAnalysisPrompt(profileData), AiInsightSchema, {

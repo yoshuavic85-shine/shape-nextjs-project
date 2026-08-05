@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { calculateShapeProfile } from "@/lib/scoring";
+import {
+  toShapeProfileData,
+  toShapeProfileJson,
+} from "@/lib/profile-mapper";
 
 export async function GET(
   request: NextRequest,
@@ -27,7 +30,7 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ profile });
+    return NextResponse.json({ profile: toShapeProfileData(profile) });
   } catch (error) {
     console.error("Get profile error:", error);
     return NextResponse.json(
@@ -73,24 +76,7 @@ export async function POST(
     }
 
     const profileData = calculateShapeProfile(assessment.responses);
-
-    const jsonData = {
-      spiritualGifts: JSON.parse(
-        JSON.stringify(profileData.spiritualGifts),
-      ) as Prisma.InputJsonValue,
-      heart: JSON.parse(
-        JSON.stringify(profileData.heart),
-      ) as Prisma.InputJsonValue,
-      abilities: JSON.parse(
-        JSON.stringify(profileData.abilities),
-      ) as Prisma.InputJsonValue,
-      personality: JSON.parse(
-        JSON.stringify(profileData.personality),
-      ) as Prisma.InputJsonValue,
-      experience: JSON.parse(
-        JSON.stringify(profileData.experience),
-      ) as Prisma.InputJsonValue,
-    };
+    const jsonData = toShapeProfileJson(profileData);
 
     const profile = await db.shapeProfile.upsert({
       where: { assessmentId },
@@ -101,7 +87,10 @@ export async function POST(
       },
     });
 
-    return NextResponse.json({ profile }, { status: 201 });
+    return NextResponse.json(
+      { profile: toShapeProfileData(profile) },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Create profile error:", error);
     return NextResponse.json(

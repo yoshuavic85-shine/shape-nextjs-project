@@ -31,13 +31,19 @@ export function getInitials(name: string): string {
     .slice(0, 2);
 }
 
+/**
+ * Personality labels based on pole difference spectrum (0–1).
+ * Thresholds are interpretive bands for ministry reflection, not clinical cutoffs.
+ */
 export function getPersonalityLabel(
   value: number,
   positiveLabel: string,
   negativeLabel: string,
+  ambiguous = false,
 ): string {
+  if (ambiguous) return "Sinyal campuran — perlu refleksi";
   const percentage = Math.round(value * 100);
-  if (percentage >= 60) return `${percentage}% ${positiveLabel}`;
-  if (percentage <= 40) return `${100 - percentage}% ${negativeLabel}`;
-  return "Seimbang";
+  if (percentage >= 62) return `${percentage}% condong ${positiveLabel}`;
+  if (percentage <= 38) return `${100 - percentage}% condong ${negativeLabel}`;
+  return "Relatif seimbang";
 }

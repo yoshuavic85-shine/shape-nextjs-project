@@ -3,15 +3,18 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# Skip postinstall (prisma generate) — schema is not available yet
+RUN npm ci --ignore-scripts
 
 # Stage 2: Build
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+ENV DOCKER_BUILD=1
 RUN npx prisma generate
-RUN npm run build
+# Use next build directly — package.json "build" also runs db push/seed (needs live DB)
+RUN npx next build
 
 # Stage 3: Production
 FROM node:20-alpine AS runner

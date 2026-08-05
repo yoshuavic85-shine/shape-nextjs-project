@@ -63,7 +63,10 @@ async function main() {
   console.log("---");
 
   type ShapeProfileData = import("../types").ShapeProfileData;
-  const profileData = assessment.shapeProfile as unknown as ShapeProfileData;
+  const { toShapeProfileData } = await import("../lib/profile-mapper");
+  const profileData = toShapeProfileData(
+    assessment.shapeProfile,
+  ) as ShapeProfileData;
 
   // 1) Analysis
   console.log("[1/2] Calling Mistral for analysis (with retry)...");

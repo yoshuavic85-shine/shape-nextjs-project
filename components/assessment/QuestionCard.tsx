@@ -20,7 +20,7 @@ export function QuestionCard({
   return (
     <Card className="mb-4">
       <div className="flex gap-4">
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+        <div className="shrink-0 w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
           {questionNumber}
         </div>
         <div className="flex-1">
@@ -30,6 +30,8 @@ export function QuestionCard({
           <LikertScale
             value={value}
             onChange={(v) => onChange(question.id, v)}
+            section={question.section}
+            name={`q-${question.id}`}
           />
         </div>
       </div>

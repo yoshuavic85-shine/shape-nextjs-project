@@ -10,6 +10,12 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    if (user.role === "ADMIN") {
+      return NextResponse.json({
+        error: "Admin mengelola gereja via /admin/churches",
+      }, { status: 400 });
+    }
+
     const church = user.churchId
       ? await db.church.findUnique({
           where: { id: user.churchId },
@@ -34,12 +40,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Never demote or reassign ADMIN through this endpoint
+    if (user.role === "ADMIN") {
+      return NextResponse.json(
+        {
+          error:
+            "Admin membuat gereja lewat panel Admin → Manajemen Gereja (/admin/churches).",
+        },
+        { status: 403 },
+      );
+    }
+
+    if (user.churchId) {
+      return NextResponse.json(
+        { error: "Anda sudah terhubung ke sebuah gereja" },
+        { status: 400 },
+      );
+    }
+
+    if (user.role !== "LEADER" && user.role !== "USER") {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { name, description } = body;
 
-    if (!name) {
+    if (!name || String(name).trim().length < 2) {
       return NextResponse.json(
-        { error: "Nama gereja wajib diisi" },
+        { error: "Nama gereja wajib diisi (minimal 2 karakter)" },
         { status: 400 },
       );
     }
@@ -47,10 +75,14 @@ export async function POST(request: NextRequest) {
     const code = generateChurchCode();
 
     const church = await db.church.create({
-      data: { name, description, code },
+      data: {
+        name: String(name).trim(),
+        description: description ? String(description).trim() : null,
+        code,
+      },
     });
 
-    // Update user to be LEADER and member of this church
+    // Promote USER → LEADER and attach to church (never touches ADMIN)
     await db.user.update({
       where: { id: user.id },
       data: { role: "LEADER", churchId: church.id },

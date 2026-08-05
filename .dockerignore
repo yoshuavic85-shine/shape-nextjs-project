@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+graphify-out
+.cursor
+*.md
+.env*.local
+coverage
+.turbo
+npm-debug.log*
+.DS_Store
+agent-transcripts
+terminals
