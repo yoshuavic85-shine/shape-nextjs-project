@@ -12,14 +12,21 @@ import { QuestionCard } from "./QuestionCard";
 import { SectionProgress } from "./SectionProgress";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import { useRouter } from "next/navigation";
-import { Loader2, Clock, Eye } from "lucide-react";
+import { Loader2, Clock, Eye, BookHeart } from "lucide-react";
+import {
+  OPEN_ENDED_PROMPTS,
+  isPromptSatisfied,
+  missingOpenEndedKeys,
+} from "@/lib/constants/open-ended";
 
 interface AssessmentStepperProps {
   assessmentId: string;
   questions: Question[];
   currentSection: ShapeSection;
   existingResponses: Record<string, number>;
+  existingStories: Record<string, string>;
 }
 
 const IDLE_MS = 15 * 60 * 1000;
@@ -29,20 +36,28 @@ export function AssessmentStepper({
   questions,
   currentSection,
   existingResponses,
+  existingStories,
 }: AssessmentStepperProps) {
   const router = useRouter();
+  const allLikertOnLoad = questions.every(
+    (q) => existingResponses[q.id] != null,
+  );
   const [activeSection, setActiveSection] =
     useState<ShapeSection>(currentSection);
   const [dbCurrentSection, setDbCurrentSection] =
     useState<ShapeSection>(currentSection);
   const [responses, setResponses] =
     useState<Record<string, number>>(existingResponses);
+  const [stories, setStories] =
+    useState<Record<string, string>>(existingStories);
+  const [storyMode, setStoryMode] = useState(allLikertOnLoad);
   const [saving, setSaving] = useState(false);
   const [autosaving, setAutosaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState(false);
   const [idleWarning, setIdleWarning] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const storyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingSaves = useRef<Record<string, number>>({});
 
@@ -51,8 +66,8 @@ export function AssessmentStepper({
   const dbIdx = SECTION_ORDER.indexOf(dbCurrentSection);
   const isOnDbCurrent = activeSection === dbCurrentSection;
   const isLastSection = activeIdx === SECTION_ORDER.length - 1;
+  const storiesComplete = missingOpenEndedKeys(stories).length === 0;
 
-  // Sections before DB cursor that have all answers persisted locally
   const persistedCompleted = SECTION_ORDER.filter((section) => {
     const idx = SECTION_ORDER.indexOf(section);
     if (idx >= dbIdx) return false;
@@ -98,11 +113,29 @@ export function AssessmentStepper({
         throw new Error(data.error || "Gagal menyimpan otomatis");
       }
     } catch (err) {
-      // Re-queue failed saves
       for (const [k, v] of entries) {
         if (pendingSaves.current[k] == null) pendingSaves.current[k] = v;
       }
       setError(err instanceof Error ? err.message : "Gagal autosave");
+    } finally {
+      setAutosaving(false);
+    }
+  };
+
+  const saveStory = async (promptKey: string, text: string) => {
+    setAutosaving(true);
+    try {
+      const res = await fetch(`/api/assessment/${assessmentId}/story`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ promptKey, text }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Gagal menyimpan cerita");
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menyimpan cerita");
     } finally {
       setAutosaving(false);
     }
@@ -124,6 +157,7 @@ export function AssessmentStepper({
       window.removeEventListener("keydown", onActivity);
       if (idleTimer.current) clearTimeout(idleTimer.current);
       if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (storyTimer.current) clearTimeout(storyTimer.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -150,33 +184,100 @@ export function AssessmentStepper({
     }, 600);
   };
 
+  const handleStoryChange = (promptKey: string, text: string) => {
+    setStories((prev) => ({ ...prev, [promptKey]: text }));
+    resetIdle();
+    if (storyTimer.current) clearTimeout(storyTimer.current);
+    storyTimer.current = setTimeout(() => {
+      void saveStory(promptKey, text);
+    }, 800);
+  };
+
   const goToSection = (section: ShapeSection) => {
     const idx = SECTION_ORDER.indexOf(section);
-    if (idx > dbIdx) return; // cannot skip ahead of DB cursor
+    if (idx > dbIdx) return;
     setReviewMode(false);
+    setStoryMode(false);
     setActiveSection(section);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleSubmitSection = async () => {
+    if (reviewMode) {
+      setSaving(true);
+      setError(null);
+      try {
+        await flushAutosave();
+        const res = await fetch(`/api/assessment/${assessmentId}/complete`, {
+          method: "POST",
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Gagal menyelesaikan assessment");
+        }
+        router.push(`/dashboard/report/${assessmentId}`);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    if (storyMode) {
+      if (!storiesComplete) {
+        setError("Lengkapi cerita wajib sebelum meninjau jawaban.");
+        return;
+      }
+      setError(null);
+      setReviewMode(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     if (!allAnswered) return;
 
-    // Editing a prior section: answers already autosaved — just move forward in UI
     if (!isOnDbCurrent) {
       const nextIdx = activeIdx + 1;
       if (nextIdx <= dbIdx) {
         goToSection(SECTION_ORDER[nextIdx]);
+      } else if (isLastSection) {
+        setStoryMode(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         goToSection(dbCurrentSection);
       }
       return;
     }
 
-    // Last section: enter review before completing
-    if (isLastSection && !reviewMode) {
-      await flushAutosave();
-      setReviewMode(true);
-      window.scrollTo({ top: 0, behavior: "smooth" });
+    if (isLastSection) {
+      setSaving(true);
+      setError(null);
+      try {
+        await flushAutosave();
+        const sectionResponses = sectionQuestions.map((q) => ({
+          questionId: q.id,
+          value: responses[q.id],
+        }));
+        const res = await fetch(`/api/assessment/${assessmentId}/responses`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            section: activeSection,
+            responses: sectionResponses,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || "Gagal menyimpan jawaban");
+        }
+        setStoryMode(true);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+      } finally {
+        setSaving(false);
+      }
       return;
     }
 
@@ -208,11 +309,6 @@ export function AssessmentStepper({
         throw new Error(data.error || "Gagal menyimpan jawaban");
       }
 
-      if (data.completed) {
-        router.push(`/dashboard/report/${assessmentId}`);
-        return;
-      }
-
       const nextSection =
         (data.currentSection as ShapeSection) ??
         SECTION_ORDER[activeIdx + 1];
@@ -229,8 +325,9 @@ export function AssessmentStepper({
 
   const primaryLabel = (() => {
     if (reviewMode) return "Konfirmasi & Selesaikan Assessment";
+    if (storyMode) return "Tinjau Jawaban";
     if (!isOnDbCurrent) return "Kembali ke Bagian Berikutnya";
-    if (isLastSection) return "Tinjau Jawaban";
+    if (isLastSection) return "Lanjut ke Cerita Hidup";
     return "Lanjut ke Bagian Berikutnya";
   })();
 
@@ -244,7 +341,7 @@ export function AssessmentStepper({
           </h2>
           <p className="text-muted-foreground mt-1">
             Periksa ringkasan sebelum menyelesaikan. Anda masih bisa kembali ke
-            bagian mana pun untuk mengubah jawaban (tersimpan otomatis).
+            bagian mana pun atau ke cerita hidup.
           </p>
         </div>
 
@@ -268,6 +365,19 @@ export function AssessmentStepper({
               </button>
             );
           })}
+          <button
+            type="button"
+            onClick={() => {
+              setReviewMode(false);
+              setStoryMode(true);
+            }}
+            className="w-full flex items-center justify-between p-4 rounded-xl bg-surface text-left hover:bg-muted/40 transition-colors"
+          >
+            <span className="font-medium text-foreground">Cerita Hidup</span>
+            <span className="text-sm text-muted-foreground">
+              {storiesComplete ? "Lengkap" : "Belum lengkap"}
+            </span>
+          </button>
         </div>
 
         {error && (
@@ -277,15 +387,117 @@ export function AssessmentStepper({
         )}
 
         <div className="flex justify-between gap-3">
-          <Button variant="outline" onClick={() => setReviewMode(false)}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setReviewMode(false);
+              setStoryMode(true);
+            }}
+          >
+            Kembali ke Cerita
+          </Button>
+          <Button
+            onClick={handleSubmitSection}
+            disabled={saving || totalAnswered < totalQuestions || !storiesComplete}
+            size="lg"
+          >
+            {saving && <Loader2 className="animate-spin" />}
+            {primaryLabel}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (storyMode) {
+    return (
+      <div className="max-w-3xl mx-auto">
+        {idleWarning && (
+          <div className="mb-4 p-4 rounded-xl bg-amber-500/10 text-amber-800 dark:text-amber-200 text-sm flex items-start gap-3">
+            <Clock className="w-5 h-5 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Sesi tampak tidak aktif</p>
+              <p className="mt-1 opacity-90">
+                Cerita tersimpan otomatis. Lanjutkan kapan saja.
+              </p>
+            </div>
+          </div>
+        )}
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-foreground flex items-center gap-2">
+            <BookHeart className="w-6 h-6 text-primary" />
+            Cerita Hidup Anda
+          </h2>
+          <p className="text-muted-foreground mt-2 leading-relaxed">
+            Skor Likert memetakan kapasitas. Cerita inilah yang menolong mentor
+            membaca panggilan — titik balik, beban hati, dan langkah yang ingin
+            Anda coba. Tulis jujur. Tidak ada jawaban yang “lebih rohani”.
+          </p>
+          {autosaving && (
+            <p className="text-xs text-muted-foreground mt-2">menyimpan…</p>
+          )}
+        </div>
+
+        <div className="space-y-6">
+          {OPEN_ENDED_PROMPTS.map((prompt) => {
+            const value = stories[prompt.key] ?? "";
+            const ok = isPromptSatisfied(prompt, value);
+            return (
+              <div key={prompt.key} className="p-5 rounded-2xl bg-surface">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <h3 className="font-semibold text-foreground">
+                    {prompt.title}
+                    {prompt.required ? (
+                      <span className="text-destructive ml-1">*</span>
+                    ) : (
+                      <span className="text-xs font-normal text-muted-foreground ml-2">
+                        opsional
+                      </span>
+                    )}
+                  </h3>
+                  {prompt.required && (
+                    <span
+                      className={`text-xs ${ok ? "text-secondary" : "text-muted-foreground"}`}
+                    >
+                      {value.trim().length}/{prompt.minLength}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-foreground mb-3">{prompt.prompt}</p>
+                {prompt.helper && (
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {prompt.helper}
+                  </p>
+                )}
+                <Textarea
+                  value={value}
+                  onChange={(e) => handleStoryChange(prompt.key, e.target.value)}
+                  placeholder="Tulis di sini…"
+                  rows={4}
+                />
+              </div>
+            );
+          })}
+        </div>
+
+        {error && (
+          <div className="mt-4 p-4 rounded-xl bg-destructive/10 text-destructive text-sm">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-between gap-3">
+          <Button
+            variant="outline"
+            onClick={() => goToSection(SECTION_ORDER[SECTION_ORDER.length - 1])}
+          >
             Kembali ke Pengalaman
           </Button>
           <Button
             onClick={handleSubmitSection}
-            disabled={saving || totalAnswered < totalQuestions}
+            disabled={!storiesComplete || saving}
             size="lg"
           >
-            {saving && <Loader2 className="animate-spin" />}
             {primaryLabel}
           </Button>
         </div>
@@ -322,7 +534,7 @@ export function AssessmentStepper({
               <p className="font-medium">Sesi tampak tidak aktif</p>
               <p className="mt-1 opacity-90">
                 Jawaban tersimpan otomatis. Lanjutkan kapan saja — assessment
-                biasanya memakan waktu 35–50 menit.
+                biasanya memakan waktu 45–70 menit termasuk cerita hidup.
               </p>
               <Button
                 size="sm"
@@ -346,8 +558,8 @@ export function AssessmentStepper({
           <p className="text-xs text-muted-foreground mt-2 p-3 rounded-xl bg-muted/40 leading-relaxed">
             Jawab jujur sesuai diri Anda — bukan jawaban yang “terlihat rohani”.
             Beberapa pertanyaan sengaja dibalik atau memeriksa perhatian agar
-            hasil lebih akurat. Ini alat refleksi pelayanan, bukan tes klinis.
-            Jawaban tersimpan otomatis.
+            hasil lebih akurat. Ini alat refleksi, bukan tes klinis. Jawaban
+            tersimpan otomatis.
           </p>
           <div className="mt-3 flex items-center gap-3">
             <Progress value={progressPercent} className="flex-1" />

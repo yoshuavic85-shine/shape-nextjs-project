@@ -21,7 +21,7 @@ function main() {
   assert(total === QUESTIONS.length, "count mismatch");
   assert(total === TOTAL_QUESTION_COUNT, `TOTAL_QUESTION_COUNT ${TOTAL_QUESTION_COUNT} != ${total}`);
   assert(counts.SPIRITUAL_GIFTS === 41, "SG should be 41");
-  assert(counts.EXPERIENCE === 20, "EXP should be 20");
+  assert(counts.EXPERIENCE === 21, "EXP should be 21");
 
   assert(scoreItem(5, true) === 1, "reverse 5→1");
   assert(scoreItem(1, true) === 5, "reverse 1→5");
@@ -58,7 +58,7 @@ function main() {
 
   const profile = calculateShapeProfile(responses);
   assert(profile.quality?.attentionPassed === true, "attention should pass");
-  assert(profile.quality?.instrumentVersion === "2.0", "version 2");
+  assert(profile.quality?.instrumentVersion === "2.1", "version 2.1");
   assert(
     profile.spiritualGifts.top[0].category === "TEACHING",
     `expected TEACHING top, got ${profile.spiritualGifts.top[0].category}`,
@@ -80,10 +80,57 @@ function main() {
     "confidence should drop when attention fails",
   );
 
-  console.log("OK — scoring smoke tests passed");
   console.log("Top gifts:", profile.spiritualGifts.top.map((t) => t.category));
   console.log("Confidence:", profile.quality?.overallConfidence);
   console.log("IE spectrum:", profile.personality.introvertExtrovert);
+
+  const flat = calculateShapeProfile(
+    QUESTIONS.map((q) => ({
+      value: q.isAttentionCheck ? (ATTENTION_EXPECTED[q.text] ?? 3) : 3,
+      question: {
+        section: q.section,
+        category: q.category,
+        reverseKeyed: q.reverseKeyed,
+        isAttentionCheck: q.isAttentionCheck,
+        text: q.text,
+      },
+    })),
+  );
+  assert(
+    (flat.quality?.undifferentiatedSections?.length ?? 0) >= 3,
+    "flat profile should be undifferentiated",
+  );
+  assert(
+    flat.quality?.overallConfidence !== "high",
+    "flat profile must not be high confidence",
+  );
+  assert(
+    Object.values(flat.spiritualGifts.scores).every((s) => s === 3),
+    "flat display scores stay at 3, not stretched",
+  );
+
+  const dual = calculateShapeProfile(
+    QUESTIONS.map((q) => ({
+      value: q.isAttentionCheck
+        ? (ATTENTION_EXPECTED[q.text] ?? 3)
+        : q.section === "PERSONALITY"
+          ? 4
+          : 3,
+      question: {
+        section: q.section,
+        category: q.category,
+        reverseKeyed: q.reverseKeyed,
+        isAttentionCheck: q.isAttentionCheck,
+        text: q.text,
+      },
+    })),
+  );
+  assert(
+    (dual.personality.ambiguousDimensions?.length ?? 0) >= 3,
+    "dual-endorsement personality should be flagged ambiguous",
+  );
+
+  console.log("OK — scoring smoke tests passed");
   void teaching;
 }
 

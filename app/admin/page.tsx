@@ -9,6 +9,7 @@ import {
   TrendingUp,
   UserCheck,
   Clock,
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -32,7 +33,9 @@ export default async function AdminDashboardPage() {
     db.user.count(),
     db.church.count(),
     db.assessment.count(),
-    db.assessment.count({ where: { status: "COMPLETED" } }),
+    db.assessment.count({
+      where: { status: { in: ["COMPLETED", "ANALYZED"] } },
+    }),
     db.user.count({
       where: {
         createdAt: {
@@ -82,7 +85,7 @@ export default async function AdminDashboardPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
+        <Card className="bg-linear-to-br from-blue-500/10 to-blue-600/5 border-blue-500/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Total Pengguna
@@ -97,7 +100,7 @@ export default async function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
+        <Card className="bg-linear-to-br from-purple-500/10 to-purple-600/5 border-purple-500/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Total Gereja
@@ -112,7 +115,7 @@ export default async function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-green-500/10 to-green-600/5 border-green-500/20">
+        <Card className="bg-linear-to-br from-green-500/10 to-green-600/5 border-green-500/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Total Assessment
@@ -127,7 +130,7 @@ export default async function AdminDashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
+        <Card className="bg-linear-to-br from-amber-500/10 to-amber-600/5 border-amber-500/20">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Completion Rate
@@ -151,6 +154,12 @@ export default async function AdminDashboardPage() {
             <CardTitle>Aksi Cepat</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-3">
+            <Link href="/admin/reports">
+              <div className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
+                <FileText className="w-6 h-6 text-primary mb-2" />
+                <p className="font-medium text-sm">Baca Laporan User</p>
+              </div>
+            </Link>
             <Link href="/admin/users">
               <div className="p-4 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer">
                 <Users className="w-6 h-6 text-primary mb-2" />
@@ -236,6 +245,15 @@ export default async function AdminDashboardPage() {
           </Link>
         </CardHeader>
         <CardContent>
+          {recentAssessments.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">
+              Belum ada assessment. Setelah user selesai, buka{" "}
+              <Link href="/admin/reports" className="text-primary underline">
+                Laporan Assessment
+              </Link>{" "}
+              untuk membaca hasilnya.
+            </p>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -299,6 +317,7 @@ export default async function AdminDashboardPage() {
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>

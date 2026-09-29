@@ -23,7 +23,14 @@ export function toShapeProfileData(row: ShapeProfileRow): ShapeProfileData {
       ambiguousDimensions: personality?.ambiguousDimensions ?? [],
     },
     experience: row.experience as ShapeProfileData["experience"],
-    quality: (row.quality as ProfileQuality | null | undefined) ?? undefined,
+    quality: (() => {
+      const q = row.quality as ProfileQuality | null | undefined;
+      if (!q) return undefined;
+      return {
+        ...q,
+        undifferentiatedSections: q.undifferentiatedSections ?? [],
+      };
+    })(),
   };
 }
 

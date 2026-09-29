@@ -40,7 +40,7 @@ export function SectionProgress({
 
         const content = (
           <>
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               {isCompleted ? (
                 <Check className="w-5 h-5" />
               ) : (

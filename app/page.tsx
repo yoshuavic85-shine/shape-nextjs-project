@@ -165,7 +165,7 @@ export default function HomePage() {
             {
               step: "1",
               title: "Jawab Assessment",
-              desc: "Jawab 90 pertanyaan yang mencakup 5 dimensi SHAPE. Setiap pertanyaan dirancang untuk membantu Anda merefleksikan diri.",
+              desc: "Jawab 185 pertanyaan skala plus cerita hidup di 5 dimensi SHAPE. Setiap jawaban membantu Anda merefleksikan diri bersama mentor.",
             },
             {
               step: "2",

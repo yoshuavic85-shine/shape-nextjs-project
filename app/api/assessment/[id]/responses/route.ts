@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
-import { calculateShapeProfile } from "@/lib/scoring";
-import { toShapeProfileJson } from "@/lib/profile-mapper";
 import { SECTION_ORDER, ShapeSection } from "@/types";
 
 async function upsertResponses(
@@ -206,53 +204,12 @@ export async function POST(
       assessment.currentSection as ShapeSection,
     );
     const nextIdx = currentIdx + 1;
-    let completed = false;
 
     if (nextIdx < SECTION_ORDER.length) {
       await db.assessment.update({
         where: { id },
         data: { currentSection: SECTION_ORDER[nextIdx] },
       });
-    } else {
-      const withResponses = await db.assessment.findUnique({
-        where: { id },
-        include: {
-          responses: { include: { question: true } },
-        },
-      });
-
-      const allQuestions = await db.question.findMany({ select: { id: true } });
-      const answeredIds = new Set(
-        withResponses?.responses.map((r) => r.questionId) ?? [],
-      );
-      const missing = allQuestions.filter((q) => !answeredIds.has(q.id));
-      if (missing.length > 0) {
-        return NextResponse.json(
-          {
-            error: `Masih ada ${missing.length} pertanyaan belum dijawab. Lengkapi semua bagian sebelum menyelesaikan.`,
-          },
-          { status: 400 },
-        );
-      }
-
-      if (withResponses?.responses.length) {
-        const profileData = calculateShapeProfile(withResponses.responses);
-        const jsonData = toShapeProfileJson(profileData);
-        await db.shapeProfile.upsert({
-          where: { assessmentId: id },
-          update: jsonData,
-          create: {
-            assessmentId: id,
-            ...jsonData,
-          },
-        });
-      }
-      await db.assessment.update({
-        where: { id },
-        data: { status: "COMPLETED" },
-      });
-      completed = true;
-      // AI analysis is triggered once by the report client stream (avoids dual race)
     }
 
     const updated = await db.assessment.findUnique({
@@ -262,7 +219,8 @@ export async function POST(
 
     return NextResponse.json({
       assessment: updated,
-      completed,
+      completed: false,
+      needsStory: nextIdx >= SECTION_ORDER.length,
       currentSection: updated?.currentSection,
     });
   } catch (error) {

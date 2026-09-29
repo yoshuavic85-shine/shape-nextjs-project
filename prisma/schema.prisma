@@ -36,6 +36,8 @@ model User {
   churchId     String?
   church       Church?      @relation(fields: [churchId], references: [id])
   assessments  Assessment[]
+  mentorNotes  MentorNote[]  @relation("MentorNoteAuthor")
+  actionPlans  ActionPlan[]  @relation("ActionPlanCreator")
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -55,6 +57,20 @@ model Church {
   @@index([code])
 }
 
+enum ActionPlanStatus {
+  PLANNED
+  IN_PROGRESS
+  DONE
+  DEFERRED
+}
+
+enum AiJobStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
 model Assessment {
   id                String             @id @default(cuid())
   userId            String
@@ -62,10 +78,15 @@ model Assessment {
   status            AssessmentStatus   @default(IN_PROGRESS)
   currentSection    ShapeSection       @default(SPIRITUAL_GIFTS)
   responses         Response[]
+  openEnded         OpenEndedResponse[]
   shapeProfile      ShapeProfile?
   aiInsight         AiInsight?
   aiInsightSections AiInsightSection[]
   callingProfile    CallingProfile?
+  mentorNotes       MentorNote[]
+  actionPlans       ActionPlan[]
+  observerInvites   ExternalRaterInvite[]
+  aiJobs            AiJob[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
 
@@ -157,4 +178,91 @@ model CallingProfile {
   rawResponse         String
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
+}
+
+model OpenEndedResponse {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  promptKey    String
+  text         String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([assessmentId, promptKey])
+  @@index([assessmentId])
+}
+
+model MentorNote {
+  id           String     @id @default(cuid())
+  assessmentId String
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  authorId     String
+  author       User       @relation("MentorNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  content      String
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([assessmentId])
+}
+
+model ActionPlan {
+  id           String           @id @default(cuid())
+  assessmentId String
+  assessment   Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  createdById  String
+  createdBy    User             @relation("ActionPlanCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  title        String
+  description  String           @default("")
+  dueDate      DateTime?
+  status       ActionPlanStatus @default(PLANNED)
+  source       String           @default("manual")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([assessmentId])
+}
+
+model ExternalRaterInvite {
+  id            String           @id @default(cuid())
+  assessmentId  String
+  assessment    Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  token         String           @unique
+  raterName     String
+  raterRelation String
+  expiresAt     DateTime
+  submittedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  rating        ExternalRating?
+
+  @@index([assessmentId])
+}
+
+model AiJob {
+  id           String      @id @default(cuid())
+  assessmentId String
+  assessment   Assessment  @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  type         String      @default("FULL_ANALYSIS")
+  status       AiJobStatus @default(PENDING)
+  phase        String?
+  error        String?
+  retryCount   Int         @default(0)
+  startedAt    DateTime?
+  completedAt  DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([assessmentId, status])
+  @@index([status, updatedAt])
+}
+
+model ExternalRating {
+  id        String              @id @default(cuid())
+  inviteId  String              @unique
+  invite    ExternalRaterInvite @relation(fields: [inviteId], references: [id], onDelete: Cascade)
+  gifts     Json
+  heart     Json
+  abilities Json
+  note      String?
+  createdAt DateTime            @default(now())
 }

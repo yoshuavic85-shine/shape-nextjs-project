@@ -182,10 +182,9 @@ export default function ChurchAnalyticsPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              Analitik ini didasarkan pada profil yang telah diselesaikan.
-              Dorong seluruh anggota untuk menyelesaikan assessment SHAPE agar
-              gambaran yang lebih akurat dapat diperoleh untuk perencanaan
-              pelayanan.
+              Daftar ini memakai rata-rata mentah kepemimpinan ≥ 4 (bukan skor
+              yang dinormalisasi per orang), jadi hanya muncul jika kepemimpinan
+              memang dijawab tinggi secara absolut.
             </p>
           </CardContent>
         </Card>

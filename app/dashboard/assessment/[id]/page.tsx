@@ -18,6 +18,7 @@ export default async function AssessmentDetailPage({
     where: { id, userId: user.id },
     include: {
       responses: true,
+      openEnded: true,
     },
   });
 
@@ -37,6 +38,11 @@ export default async function AssessmentDetailPage({
     existingResponses[r.questionId] = r.value;
   }
 
+  const existingStories: Record<string, string> = {};
+  for (const s of assessment.openEnded) {
+    existingStories[s.promptKey] = s.text;
+  }
+
   return (
     <div className="max-w-6xl mx-auto">
       <AssessmentStepper
@@ -52,6 +58,7 @@ export default async function AssessmentDetailPage({
         }))}
         currentSection={assessment.currentSection as ShapeSection}
         existingResponses={existingResponses}
+        existingStories={existingStories}
       />
     </div>
   );

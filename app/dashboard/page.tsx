@@ -33,10 +33,14 @@ export default async function DashboardPage() {
     orderBy: { createdAt: "desc" },
   });
 
-  const completedCount = assessments.filter(
+  const completedAssessments = assessments.filter(
     (a: { status: string }) =>
       a.status === "COMPLETED" || a.status === "ANALYZED",
-  ).length;
+  );
+  const compareHref =
+    completedAssessments.length >= 2
+      ? `/dashboard/compare?a=${completedAssessments[completedAssessments.length - 1].id}&b=${completedAssessments[0].id}`
+      : null;
   const inProgressCount = assessments.filter(
     (a: { status: string }) => a.status === "IN_PROGRESS",
   ).length;
@@ -74,7 +78,7 @@ export default async function DashboardPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-foreground">
-                {completedCount}
+                {completedAssessments.length}
               </p>
               <p className="text-sm text-muted-foreground">Selesai</p>
             </div>
@@ -96,13 +100,20 @@ export default async function DashboardPage() {
       </div>
 
       {/* Actions */}
-      <div className="mb-8">
+      <div className="mb-8 flex flex-wrap gap-3">
         <Link href="/dashboard/assessment">
           <Button size="lg" className="gap-2">
             <Plus className="w-5 h-5" />
             Mulai Assessment Baru
           </Button>
         </Link>
+        {compareHref && (
+          <Link href={compareHref}>
+            <Button size="lg" variant="outline">
+              Bandingkan assessment
+            </Button>
+          </Link>
+        )}
       </div>
 
       {/* Assessment List */}

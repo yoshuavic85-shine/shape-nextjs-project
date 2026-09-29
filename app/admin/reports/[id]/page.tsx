@@ -30,6 +30,7 @@ export default async function AdminReportDetailPage({
       shapeProfile: true,
       aiInsight: true,
       callingProfile: true,
+      openEnded: true,
       responses: { include: { question: true } },
       user: {
         select: {
@@ -62,6 +63,7 @@ export default async function AdminReportDetailPage({
         shapeProfile: true,
         aiInsight: true,
         callingProfile: true,
+        openEnded: true,
         responses: { include: { question: true } },
         user: {
           select: {
@@ -141,6 +143,12 @@ export default async function AdminReportDetailPage({
         callingProfile={callingProfile}
         autoGenerate={false}
         subjectName={assessment.user.name}
+        stories={assessment.openEnded.map((s) => ({
+          promptKey: s.promptKey,
+          text: s.text,
+        }))}
+        canMentor
+        isOwner={false}
       />
     </div>
   );

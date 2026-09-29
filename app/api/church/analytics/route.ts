@@ -79,8 +79,8 @@ export async function GET() {
       }
 
       // Identify potential leaders with topGifts and leadershipScore
-      const giftScore = gifts?.scores?.LEADERSHIP ?? 0;
-      const abilityScore = abilities?.scores?.LEADERSHIP_ABILITY ?? 0;
+      const giftScore = gifts?.rawMeans?.LEADERSHIP ?? 0;
+      const abilityScore = abilities?.rawMeans?.LEADERSHIP_ABILITY ?? 0;
       if (giftScore >= 4 || abilityScore >= 4) {
         const topGifts = (gifts?.top as CategoryScore[] | undefined)?.map(
           (g) => g.label ?? g.category,

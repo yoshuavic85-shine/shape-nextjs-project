@@ -6,6 +6,7 @@ import {
   toShapeProfileData,
   toShapeProfileJson,
 } from "@/lib/profile-mapper";
+import { loadAuthorizedAssessment } from "@/lib/access";
 
 export async function GET(
   request: NextRequest,
@@ -18,6 +19,13 @@ export async function GET(
     }
 
     const { assessmentId } = await params;
+    const access = await loadAuthorizedAssessment(assessmentId, user);
+    if (!access) {
+      return NextResponse.json(
+        { error: "Profil tidak ditemukan" },
+        { status: 404 },
+      );
+    }
 
     const profile = await db.shapeProfile.findUnique({
       where: { assessmentId },
@@ -51,9 +59,16 @@ export async function POST(
     }
 
     const { assessmentId } = await params;
+    const access = await loadAuthorizedAssessment(assessmentId, user);
+    if (!access) {
+      return NextResponse.json(
+        { error: "Assessment tidak ditemukan" },
+        { status: 404 },
+      );
+    }
 
-    const assessment = await db.assessment.findFirst({
-      where: { id: assessmentId, userId: user.id },
+    const assessment = await db.assessment.findUnique({
+      where: { id: assessmentId },
       include: {
         responses: {
           include: { question: true },

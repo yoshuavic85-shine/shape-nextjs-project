@@ -68,6 +68,8 @@ const ATTENTION_ABILITIES =
   "Ini pemeriksaan kualitas jawaban — pilih angka 1 pada pertanyaan ini.";
 const ATTENTION_PERSONALITY =
   "Agar hasil akurat, pilih angka 3 (Netral) pada pertanyaan ini.";
+const ATTENTION_EXP =
+  "Pemeriksaan perhatian: silakan pilih angka 5 pada pertanyaan ini.";
 
 // ==========================================
 // SPIRITUAL GIFTS — karunia = dampak rohani / pola pelayanan
@@ -784,7 +786,9 @@ export const QUESTIONS: QuestionDefinition[] = [
   ...interleaveSection("PERSONALITY", PERSONALITY, {
     text: ATTENTION_PERSONALITY,
   }),
-  ...interleaveSection("EXPERIENCE", EXPERIENCE),
+  ...interleaveSection("EXPERIENCE", EXPERIENCE, {
+    text: ATTENTION_EXP,
+  }),
 ];
 
 /** Expected Likert value for attention items (parsed from instructional text). */
@@ -793,6 +797,7 @@ export const ATTENTION_EXPECTED: Record<string, number> = {
   [ATTENTION_HEART]: 4,
   [ATTENTION_ABILITIES]: 1,
   [ATTENTION_PERSONALITY]: 3,
+  [ATTENTION_EXP]: 5,
 };
 
 export function countQuestionsBySection(): Record<ShapeSectionKey, number> {

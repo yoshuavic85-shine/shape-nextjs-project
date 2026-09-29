@@ -51,14 +51,14 @@ export function AssessmentStartClient() {
           Assessment SHAPE
         </h1>
         <p className="text-muted-foreground">
-          Jawab {TOTAL_QUESTION_COUNT} pertanyaan untuk merefleksikan desain
-          pelayanan Anda. Assessment terdiri dari 5 bagian (instrumen v2 dengan
-          item yang lebih lengkap dan pemeriksaan kualitas jawaban).
+          Jawab {TOTAL_QUESTION_COUNT} pertanyaan skala plus 8 cerita hidup
+          untuk merefleksikan desain Anda. Assessment terdiri dari 5 bagian
+          (instrumen v2.1) lalu ruang menulis yang dibaca mentor dan AI.
         </p>
         <p className="text-xs text-muted-foreground mt-3 max-w-xl mx-auto leading-relaxed">
-          Hasil bersifat reflektif untuk discovery pelayanan — bukan diagnosis
-          psikologis. Estimasi waktu: 35–50 menit. Setiap jawaban tersimpan
-          otomatis; progress juga disimpan per bagian.
+          Hasil bersifat reflektif — bukan diagnosis psikologis atau klaim
+          nubuatan. Estimasi waktu: 45–70 menit. Setiap jawaban tersimpan
+          otomatis. Doakan hati yang jujur sebelum mulai.
         </p>
       </div>
 

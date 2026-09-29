@@ -65,13 +65,15 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/** Minimum within-person spread (ipsative) to treat a ranking as meaningful. */
+export const DIFFERENTIATION_THRESHOLD = 0.5;
+
 /**
- * Ipsative category scoring within a section:
+ * Category scoring within a section:
  * 1) score items (reverse-aware)
- * 2) raw mean per category
- * 3) subtract person-section mean (ipsative)
- * 4) map to 1–5 display for charts
- * 5) rank top-N by ipsative strength
+ * 2) raw mean per category — this is the display score (absolute 1–5)
+ * 3) subtract person-section mean (ipsative) — used only to rank relative strengths
+ * 4) rank top-N by ipsative strength (not stretched to look dramatic)
  */
 function calculateCategoryScores(
   responses: ResponseWithQuestion[],
@@ -82,6 +84,8 @@ function calculateCategoryScores(
   rawMeans: Record<string, number>;
   top: CategoryScore[];
   consistencyByCategory: Record<string, number>;
+  undifferentiated: boolean;
+  maxIpsative: number;
 } {
   const categoryMap: Record<string, number[]> = {};
 
@@ -116,16 +120,16 @@ function calculateCategoryScores(
     ipsative[cat] = raw - personMean;
   }
 
-  // Display scores: center at 3, scale by max absolute ipsative in section
-  const maxAbs = Math.max(
-    0.5,
-    ...Object.values(ipsative).map((v) => Math.abs(v)),
+  const maxIpsative = Object.values(ipsative).reduce(
+    (m, v) => Math.max(m, Math.abs(v)),
+    0,
   );
+  const undifferentiated = maxIpsative < DIFFERENTIATION_THRESHOLD;
+
+  // Display scores stay on the absolute Likert scale so a flat profile looks flat.
   const scores: Record<string, number> = {};
-  for (const [cat, ip] of Object.entries(ipsative)) {
-    scores[cat] = round2(
-      Math.min(5, Math.max(1, 3 + (ip / maxAbs) * 2)),
-    );
+  for (const [cat, raw] of Object.entries(rawMeans)) {
+    scores[cat] = round2(Math.min(5, Math.max(1, raw)));
   }
 
   const top = Object.entries(ipsative)
@@ -140,7 +144,14 @@ function calculateCategoryScores(
       consistency: consistencyByCategory[category],
     }));
 
-  return { scores, rawMeans, top, consistencyByCategory };
+  return {
+    scores,
+    rawMeans,
+    top,
+    consistencyByCategory,
+    undifferentiated,
+    maxIpsative: round2(maxIpsative),
+  };
 }
 
 /**
@@ -188,17 +199,22 @@ function calculatePersonality(
 
     const posAvg = mean(posValues);
     const negAvg = mean(negValues);
-
-    // Both poles strongly endorsed → preference unclear
-    if (posAvg >= 4 && negAvg >= 4) {
-      ambiguousDimensions.push(pair.key);
-    }
-    // Both poles strongly rejected → weak signal
-    if (posAvg <= 2 && negAvg <= 2) {
-      ambiguousDimensions.push(pair.key);
-    }
-
     const diff = posAvg - negAvg; // -4..4
+    const absDiff = Math.abs(diff);
+
+    // Weak pole contrast (after reverse-keying) → preference unclear.
+    // Reverse-keyed items pull dual-endorsement means toward ~3.5, so a
+    // raw "both ≥ 4" threshold almost never fires.
+    if (absDiff < 0.75) {
+      ambiguousDimensions.push(pair.key);
+    }
+    if (posAvg >= 3.5 && negAvg >= 3.5) {
+      ambiguousDimensions.push(pair.key);
+    }
+    if (posAvg <= 2.5 && negAvg <= 2.5) {
+      ambiguousDimensions.push(pair.key);
+    }
+
     result[pair.key] = round2((diff + 4) / 8);
   }
 
@@ -212,6 +228,7 @@ const ATTENTION_EXPECTED_BY_SECTION: Partial<Record<string, number>> = {
   HEART: 4,
   ABILITIES: 1,
   PERSONALITY: 3,
+  EXPERIENCE: 5,
 };
 
 function evaluateAttention(
@@ -256,6 +273,7 @@ function confidenceFromSignals(input: {
   attentionPassed: boolean;
   acquiescence: boolean;
   personalityAmbiguousCount: number;
+  undifferentiatedCount: number;
 }): ProfileQuality["overallConfidence"] {
   let score = 0;
   if (input.itemsPerCategory >= 4) score += 2;
@@ -269,6 +287,8 @@ function confidenceFromSignals(input: {
 
   if (input.acquiescence) score -= 1;
   if (input.personalityAmbiguousCount >= 3) score -= 1;
+  if (input.undifferentiatedCount >= 2) score -= 2;
+  else if (input.undifferentiatedCount >= 1) score -= 1;
 
   if (score >= 5) return "high";
   if (score >= 3) return "moderate";
@@ -303,56 +323,57 @@ export function calculateShapeProfile(
       ).length
     : 4;
 
+  const undifferentiatedSections = (
+    [
+      ["SPIRITUAL_GIFTS", gifts.undifferentiated],
+      ["HEART", heart.undifferentiated],
+      ["ABILITIES", abilities.undifferentiated],
+      ["EXPERIENCE", experience.undifferentiated],
+    ] as const
+  )
+    .filter(([, flag]) => flag)
+    .map(([key]) => key);
+
   const overallConfidence = confidenceFromSignals({
     itemsPerCategory,
     consistency,
     attentionPassed: attention.passed,
     acquiescence: acquiescenceFlag,
     personalityAmbiguousCount: personality.ambiguousDimensions?.length ?? 0,
+    undifferentiatedCount: undifferentiatedSections.length,
   });
 
   const quality: ProfileQuality = {
-    instrumentVersion: "2.0",
+    instrumentVersion: "2.1",
     attentionPassed: attention.passed,
     attentionFailures: attention.failures,
     acquiescenceFlag,
     overallConfidence,
     meanItemConsistency: round2(consistency),
     itemsPerCategory,
+    undifferentiatedSections,
     disclaimer:
       "Hasil ini adalah alat refleksi dan discovery pelayanan, bukan diagnosis psikologis atau klaim nubuatan. Interpretasikan bersama mentor/pemimpin rohani.",
   };
 
+  const toBlock = (
+    block: ReturnType<typeof calculateCategoryScores>,
+  ): ShapeProfileData["spiritualGifts"] => ({
+    scores: block.scores,
+    rawMeans: Object.fromEntries(
+      Object.entries(block.rawMeans).map(([k, v]) => [k, round2(v)]),
+    ),
+    top: block.top,
+    undifferentiated: block.undifferentiated,
+    maxIpsative: block.maxIpsative,
+  });
+
   return {
-    spiritualGifts: {
-      scores: gifts.scores,
-      rawMeans: Object.fromEntries(
-        Object.entries(gifts.rawMeans).map(([k, v]) => [k, round2(v)]),
-      ),
-      top: gifts.top,
-    },
-    heart: {
-      scores: heart.scores,
-      rawMeans: Object.fromEntries(
-        Object.entries(heart.rawMeans).map(([k, v]) => [k, round2(v)]),
-      ),
-      top: heart.top,
-    },
-    abilities: {
-      scores: abilities.scores,
-      rawMeans: Object.fromEntries(
-        Object.entries(abilities.rawMeans).map(([k, v]) => [k, round2(v)]),
-      ),
-      top: abilities.top,
-    },
+    spiritualGifts: toBlock(gifts),
+    heart: toBlock(heart),
+    abilities: toBlock(abilities),
     personality,
-    experience: {
-      scores: experience.scores,
-      rawMeans: Object.fromEntries(
-        Object.entries(experience.rawMeans).map(([k, v]) => [k, round2(v)]),
-      ),
-      top: experience.top,
-    },
+    experience: toBlock(experience),
     quality,
   };
 }

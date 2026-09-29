@@ -13,7 +13,11 @@ import { ShapeRadarChart } from "@/components/profile/ShapeRadarChart";
 import { GiftCard } from "@/components/profile/GiftCard";
 import { PersonalityChart } from "@/components/profile/PersonalityChart";
 import { CallingInsight } from "@/components/profile/CallingInsight";
+import { MentoringPanel } from "@/components/profile/MentoringPanel";
+import { ObserverGap } from "@/components/profile/ObserverGap";
+import { OPEN_ENDED_PROMPTS } from "@/lib/constants/open-ended";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
@@ -30,6 +34,8 @@ import {
   CheckCircle2,
   XCircle,
   ShieldAlert,
+  Handshake,
+  CalendarClock,
 } from "lucide-react";
 
 interface ReportClientProps {
@@ -40,6 +46,10 @@ interface ReportClientProps {
   /** When false, do not auto-start AI generation (e.g. admin viewing). */
   autoGenerate?: boolean;
   subjectName?: string | null;
+  stories?: { promptKey: string; text: string }[];
+  canMentor?: boolean;
+  isOwner?: boolean;
+  compareHref?: string | null;
 }
 
 export function ReportClient({
@@ -49,6 +59,10 @@ export function ReportClient({
   callingProfile,
   autoGenerate = true,
   subjectName,
+  stories = [],
+  canMentor = false,
+  isOwner = true,
+  compareHref = null,
 }: ReportClientProps) {
   const router = useRouter();
   const [insight, setInsight] = useState<AiInsightData | null>(aiInsight);
@@ -64,86 +78,150 @@ export function ReportClient({
   const [progressDone, setProgressDone] = useState<"idle" | "success" | "error">(
     "idle",
   );
-  const [activeTab, setActiveTab] = useState<"profile" | "calling">("profile");
+  const [activeTab, setActiveTab] = useState<
+    "profile" | "calling" | "mentoring"
+  >("profile");
+  const [observerRatings, setObserverRatings] = useState<
+    {
+      raterName: string;
+      raterRelation: string;
+      gifts: Record<string, number>;
+      heart: Record<string, number>;
+      abilities: Record<string, number>;
+      note?: string | null;
+    }[]
+  >([]);
   const generatedOnce = useRef(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const kickAtRef = useRef(0);
 
-  const runGenerateFull = () => {
+  const stopPolling = () => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current);
+      pollingRef.current = null;
+    }
+  };
+
+  const applyStatus = (data: {
+    status: string;
+    phase?: string | null;
+    error?: string | null;
+    aiInsight?: AiInsightData;
+    callingProfile?: CallingProfileData;
+  }) => {
+    if (data.status === "DONE" && data.aiInsight && data.callingProfile) {
+      stopPolling();
+      setInsight(data.aiInsight);
+      setCalling(data.callingProfile);
+      setProgress({ value: 100, label: "Selesai." });
+      setProgressDone("success");
+      setLoadingAI(false);
+      setError(null);
+      return true;
+    }
+    if (data.status === "FAILED") {
+      stopPolling();
+      setError(data.error || "Gagal menghasilkan AI");
+      setProgress({ value: 0, label: data.error || "Gagal" });
+      setProgressDone("error");
+      setLoadingAI(false);
+      return true;
+    }
+    const phaseLabel =
+      data.phase === "calling"
+        ? "AI sedang menyusun Arah Panggilan..."
+        : data.phase === "analysis"
+          ? "AI sedang menyusun Analisis SHAPE..."
+          : data.phase === "report"
+            ? "AI sedang menyusun laporan SHAPE..."
+            : "AI sedang bekerja di latar belakang...";
+    const value =
+      data.phase === "calling"
+        ? 65
+        : data.phase === "analysis"
+          ? 30
+          : data.phase === "report"
+            ? 40
+            : 15;
+    setProgress({ value, label: phaseLabel });
+    return false;
+  };
+
+  const startPolling = (currentAssessmentId: string) => {
+    if (pollingRef.current) return;
+    pollingRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/ai/status/${currentAssessmentId}`);
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          status: string;
+          phase?: string | null;
+          error?: string | null;
+          aiInsight?: AiInsightData;
+          callingProfile?: CallingProfileData;
+        };
+        if (applyStatus(data)) return;
+
+        if (
+          (data.status === "PENDING" || data.status === "ANALYZING") &&
+          Date.now() - kickAtRef.current > 70_000
+        ) {
+          kickAtRef.current = Date.now();
+          fetch("/api/ai/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assessmentId: currentAssessmentId }),
+          }).catch(() => undefined);
+        }
+      } catch {
+        // keep polling
+      }
+    }, 3000);
+
+    setTimeout(() => {
+      if (pollingRef.current) {
+        stopPolling();
+        setLoadingAI(false);
+        setError(
+          "Proses terlalu lama. Muat ulang halaman untuk memeriksa hasilnya.",
+        );
+        setProgressDone("error");
+      }
+    }, 10 * 60 * 1000);
+  };
+
+  const runGenerateFull = (force = false) => {
     if (!profile || loadingAI) return;
     setLoadingAI(true);
     setError(null);
-    setProgress({ value: 0, label: "Memulai..." });
+    setProgress({ value: 8, label: "Membuat job analisis..." });
     setProgressDone("idle");
+    stopPolling();
+    kickAtRef.current = Date.now();
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10 * 60 * 1000);
-
-    fetch("/api/ai/generate-full-stream", {
+    fetch("/api/ai/jobs", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ assessmentId }),
-      signal: controller.signal,
+      body: JSON.stringify({ assessmentId, force }),
     })
       .then(async (res) => {
-        if (!res.ok || !res.body) {
-          const data = await res.json().catch(() => ({}));
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        if (!res.ok) {
           throw new Error(data.error || `HTTP ${res.status}`);
         }
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n\n");
-          buffer = lines.pop() ?? "";
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6)) as {
-                  phase: string;
-                  status?: string;
-                  progress?: number;
-                  label?: string;
-                  message?: string;
-                  aiInsight?: AiInsightData;
-                  callingProfile?: CallingProfileData;
-                };
-                if (data.progress != null)
-                  setProgress({
-                    value: data.progress,
-                    label: data.label ?? "",
-                  });
-                if (data.phase === "error") {
-                  const msg = data.message ?? "Gagal menghasilkan AI";
-                  setError(msg);
-                  setProgress({ value: 0, label: msg });
-                  setProgressDone("error");
-                }
-                if (data.phase === "done" && data.aiInsight && data.callingProfile) {
-                  setInsight(data.aiInsight);
-                  setCalling(data.callingProfile);
-                  setProgressDone("success");
-                }
-              } catch {
-                // skip invalid JSON
-              }
-            }
-          }
-        }
+        setProgress({
+          value: 15,
+          label: "Job dibuat. AI sedang berjalan di latar belakang...",
+        });
+        startPolling(assessmentId);
       })
       .catch((err) => {
         const msg =
-          err.name === "AbortError"
-            ? "Permintaan terlalu lama. Coba lagi atau periksa koneksi."
-            : err instanceof Error
-              ? err.message
-              : "Gagal menghasilkan AI";
+          err instanceof Error ? err.message : "Gagal menghasilkan AI";
         setError(msg);
         setProgressDone("error");
-      })
-      .finally(() => {
-        clearTimeout(timeoutId);
         setLoadingAI(false);
       });
   };
@@ -161,6 +239,46 @@ export function ReportClient({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assessmentId, profile, autoGenerate]);
+
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    fetch(`/api/assessment/${assessmentId}/observers`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!data?.invites) return;
+        const filled = data.invites
+          .filter((inv: { rating?: unknown }) => inv.rating)
+          .map(
+            (inv: {
+              raterName: string;
+              raterRelation: string;
+              rating: {
+                gifts: Record<string, number>;
+                heart: Record<string, number>;
+                abilities: Record<string, number>;
+                note?: string | null;
+              };
+            }) => ({
+              raterName: inv.raterName,
+              raterRelation: inv.raterRelation,
+              gifts: inv.rating.gifts,
+              heart: inv.rating.heart,
+              abilities: inv.rating.abilities,
+              note: inv.rating.note,
+            }),
+          );
+        setObserverRatings(filled);
+      })
+      .catch(() => undefined);
+  }, [assessmentId]);
 
   if (!profile) {
     return (
@@ -181,6 +299,7 @@ export function ReportClient({
   const tabs = [
     { key: "profile" as const, label: "Profil SHAPE", icon: Target },
     { key: "calling" as const, label: "Arah Panggilan", icon: Compass },
+    { key: "mentoring" as const, label: "Pendampingan", icon: Handshake },
   ];
 
   return (
@@ -192,7 +311,8 @@ export function ReportClient({
             : "Laporan SHAPE Anda"}
         </h1>
         <p className="text-muted-foreground mt-1">
-          Ringkasan reflektif desain pelayanan (instrumen v2) — ranking relatif
+          Ringkasan reflektif desain hidup dan pelayanan (instrumen v2.1) —
+          skor adalah rata-rata jawaban Anda (1–5), ranking bersifat relatif
           dalam diri, bukan prediksi absolut.
         </p>
       </div>
@@ -228,6 +348,17 @@ export function ReportClient({
               <p className="text-muted-foreground leading-relaxed">
                 {profile.quality.disclaimer}
               </p>
+              {(profile.quality.undifferentiatedSections ?? []).length > 0 && (
+                <p className="text-amber-800 dark:text-amber-200 leading-relaxed">
+                  Profil belum terdiferensiasi pada:{" "}
+                  {(profile.quality.undifferentiatedSections ?? [])
+                    .map((s) => getSectionTitle(s as ShapeSection))
+                    .join(", ")}
+                  . Jangan anggap ranking “top” sebagai panggilan — sebaran
+                  jawaban masih terlalu rata. Ini bahan diskusi dengan mentor,
+                  bukan keputusan hidup.
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -302,7 +433,7 @@ export function ReportClient({
                 }),
               )}
               color="#8B6F47"
-              title="Karunia Rohani (relatif)"
+              title="Karunia Rohani (rata-rata 1–5)"
             />
             <ShapeRadarChart
               data={Object.entries(profile.heart.scores).map(
@@ -317,7 +448,7 @@ export function ReportClient({
                 }),
               )}
               color="#C4956A"
-              title="Hati / Passion (relatif)"
+              title="Hati / Passion (rata-rata 1–5)"
             />
             <ShapeRadarChart
               data={Object.entries(profile.abilities.scores).map(
@@ -332,7 +463,7 @@ export function ReportClient({
                 }),
               )}
               color="#6B8E5A"
-              title="Kemampuan (relatif)"
+              title="Kemampuan (rata-rata 1–5)"
             />
           </div>
 
@@ -341,16 +472,19 @@ export function ReportClient({
               title="Top Karunia Rohani"
               items={profile.spiritualGifts.top}
               color="#8B6F47"
+              undifferentiated={profile.spiritualGifts.undifferentiated}
             />
             <GiftCard
               title="Top Passion"
               items={profile.heart.top}
               color="#C4956A"
+              undifferentiated={profile.heart.undifferentiated}
             />
             <GiftCard
               title="Top Kemampuan"
               items={profile.abilities.top}
               color="#6B8E5A"
+              undifferentiated={profile.abilities.undifferentiated}
             />
           </div>
 
@@ -360,7 +494,35 @@ export function ReportClient({
             title="Pengalaman Formatif"
             items={profile.experience.top}
             color="#8B6F47"
+            undifferentiated={profile.experience.undifferentiated}
           />
+
+          {stories.filter((s) => s.text.trim()).length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Cerita hidup</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {stories
+                  .filter((s) => s.text.trim())
+                  .map((s) => {
+                    const meta = OPEN_ENDED_PROMPTS.find(
+                      (p) => p.key === s.promptKey,
+                    );
+                    return (
+                      <div key={s.promptKey}>
+                        <p className="text-sm font-semibold text-foreground">
+                          {meta?.title ?? s.promptKey}
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1 whitespace-pre-line">
+                          {s.text}
+                        </p>
+                      </div>
+                    );
+                  })}
+              </CardContent>
+            </Card>
+          )}
 
           {/* ── AI Insight: Identitas & Kekuatan ── */}
           {insight ? (
@@ -500,8 +662,8 @@ export function ReportClient({
                     </div>
                     <Progress value={progress.value} className="h-3 mb-2" />
                     <p className="text-sm text-muted-foreground">
-                      {progress.value}% — Proses bisa memakan waktu 5–10 menit.
-                      Jangan tutup halaman.
+                      {progress.value}% — Boleh tetap di halaman ini. Laporan
+                      dikerjakan di server, bukan di request browser.
                     </p>
                   </>
                 ) : (
@@ -523,7 +685,7 @@ export function ReportClient({
                     {(error || !autoGenerate) && (
                       <button
                         type="button"
-                        onClick={() => runGenerateFull()}
+                        onClick={() => runGenerateFull(Boolean(error))}
                         className="text-sm font-medium text-primary underline hover:no-underline"
                       >
                         {error ? "Coba lagi" : "Hasilkan analisis AI"}
@@ -534,6 +696,44 @@ export function ReportClient({
               </CardContent>
             </Card>
           )}
+
+          <div className="p-5 rounded-2xl border border-primary/20 bg-primary/5">
+            <div className="flex items-start gap-3">
+              <CalendarClock className="w-5 h-5 text-primary mt-0.5 shrink-0" />
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">
+                  Langkah berikutnya
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Laporan ini adalah cermin, bukan peta jadi. Hidup menjadi
+                  lebih terarah ketika Anda mendiskusikannya, mengujinya dalam
+                  eksperimen kecil, dan meninjau ulang beberapa bulan kemudian.
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    onClick={() => setActiveTab("mentoring")}
+                  >
+                    Diskusikan dengan mentor
+                  </Button>
+                  {compareHref && (
+                    <Link href={compareHref}>
+                      <Button size="sm" variant="outline">
+                        Bandingkan assessment
+                      </Button>
+                    </Link>
+                  )}
+                  {isOwner && (
+                    <Link href="/dashboard/assessment">
+                      <Button size="sm" variant="outline">
+                        Ulangi 6 bulan lagi
+                      </Button>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -554,8 +754,9 @@ export function ReportClient({
                   <strong className="text-foreground">
                     arah dan konteks pelayanan
                   </strong>{" "}
-                  Anda — kelompok panggilan, lingkungan yang cocok, pola hidup,
-                  dan langkah konkret pengembangan diri ke depan.
+                  Anda — kelompok panggilan, lingkungan yang cocok, pola hidup
+                  (termasuk pekerjaan dan keluarga), dan eksperimen konkret
+                  yang bisa dicentang bersama mentor.
                 </p>
               </div>
             </div>
@@ -592,6 +793,28 @@ export function ReportClient({
               </CardContent>
             </Card>
           )}
+        </div>
+      )}
+
+      {activeTab === "mentoring" && (
+        <div className="space-y-6">
+          <div className="p-5 rounded-2xl border border-accent/20 bg-accent/5">
+            <h2 className="font-semibold text-foreground mb-1">
+              Pendampingan, bukan tes sekali jalan
+            </h2>
+            <p className="text-sm text-muted-foreground leading-relaxed">
+              Catat eksperimen, undang orang yang mengenal Anda, dan tulis
+              kesepakatan sesi. Mentor gereja melihat laporan yang sama dan
+              dapat menambahkan catatan.
+            </p>
+          </div>
+          <ObserverGap profile={profile} ratings={observerRatings} />
+          <MentoringPanel
+            assessmentId={assessmentId}
+            canMentor={canMentor}
+            isOwner={isOwner}
+            developmentPath={calling?.developmentPath ?? []}
+          />
         </div>
       )}
     </div>

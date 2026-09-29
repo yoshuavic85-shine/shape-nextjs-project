@@ -72,7 +72,9 @@ export default async function AdminReportsPage({
           Laporan Assessment
         </h1>
         <p className="text-muted-foreground mt-1">
-          Lihat hasil assessment SHAPE per pengguna
+          Baca hasil SHAPE per pengguna: klik{" "}
+          <strong className="text-foreground">Lihat Laporan</strong> pada
+          assessment yang statusnya Selesai atau Dianalisis.
         </p>
       </div>
 

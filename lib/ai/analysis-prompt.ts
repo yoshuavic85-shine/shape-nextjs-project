@@ -1,50 +1,55 @@
 import { ShapeProfileData } from "@/types";
+import type { StoryAnswer } from "./story-context";
+import { compactProfile, compactStories } from "./compact-profile";
 
-export function buildAnalysisPrompt(profile: ShapeProfileData): string {
-  const profileJson = JSON.stringify(profile);
-  const confidence = profile.quality?.overallConfidence ?? "moderate";
-  const attentionNote = profile.quality?.attentionPassed
-    ? "Pemeriksaan perhatian lulus."
-    : `Pemeriksaan perhatian GAGAL pada: ${(profile.quality?.attentionFailures ?? []).join(", ") || "tidak diketahui"}.`;
-  const acquiescenceNote = profile.quality?.acquiescenceFlag
-    ? "Ada indikasi jawaban cenderung setuju-semua (acquiescence)."
-    : "Tidak ada indikasi acquiescence kuat.";
+const SHARED_RULES = `Konselor rohani Kristen. JSON murni, Bahasa Indonesia, singkat.
+Bukan nubuat/diagnosis. Hedged ("tampaknya"). Ranking relatif, bukan banding orang lain.
+Jangan mengarang cerita. Jika cerita kosong, sebutkan itu.`;
 
-  return `Kamu adalah seorang konselor rohani Kristen yang bijaksana dan penuh kasih. Tugasmu adalah menganalisis hasil assessment SHAPE seseorang dan memberikan insight yang reflektif, mendorong, dan berdasarkan prinsip Alkitab.
+export function buildAnalysisPrompt(
+  profile: ShapeProfileData,
+  stories: StoryAnswer[] = [],
+): string {
+  return `${SHARED_RULES}
+Tujuan: 1 ringkasan SHAPE untuk mentoring.
 
-ATURAN:
-1. Kamu TIDAK mengklaim otoritas profetik atau wahyu ilahi.
-2. Gunakan nada hangat, mendorong, dan penuh pengharapan.
-3. Gunakan frasa seperti "tampaknya", "mungkin", "berdasarkan assessment ini".
-4. Berikan insight berdasarkan prinsip-prinsip Alkitab, bukan prediksi masa depan.
-5. JANGAN menyajikan hasil sebagai diagnosis psikologis atau tes klinis.
-6. Tingkat kepercayaan skor keseluruhan: ${confidence.toUpperCase()}.
-   - Jika LOW: tekankan ketidakpastian, sarankan refleksi ulang / diskusi mentor, hindari rekomendasi yang terlalu spesifik.
-   - Jika MODERATE: beri insight berhati-hati dengan bahasa hedged.
-   - Jika HIGH: tetap hedged, tapi boleh lebih konkret.
-7. "top" adalah ranking relatif IPSATIVE (kekuatan relatif dalam diri orang ini), bukan skor absolut dibanding orang lain.
-8. Personality: nilai 0–1 dari selisih kutub. Perhatikan ambiguousDimensions — jangan memaksa label pada dimensi yang ambigu.
-9. ${attentionNote} ${acquiescenceNote}
+DATA:
+${JSON.stringify(compactProfile(profile))}
+CERITA:
+${compactStories(stories)}
 
-KETERANGAN SKOR:
-- Item dinilai 1–5 (dengan reverse-keying di belakang layar)
-- scores: nilai tampilan relatif (ipsative) ≈1–5 untuk visualisasi
-- rawMeans: rata-rata mentah per kategori
-- quality: meta kualitas instrumen & jawaban
-
-Hasil assessment SHAPE:
-${profileJson}
-
-INSTRUKSI OUTPUT:
-Berikan analisis dalam format JSON berikut (Bahasa Indonesia). Setiap teks HARUS singkat dan padat.
-
-{
-  "summary": "(string, maks 100 kata) Ringkasan profil SHAPE + sebutkan bahwa ini refleksi relatif, jelaskan bagaimana dimensi saling terhubung. Sesuaikan kepastian dengan tingkat kepercayaan.",
-  "strengths": ["(array of string, 4 item) Kekuatan utama berdasarkan ranking relatif."],
-  "ministryRecommendations": ["(array of string, 3-4 item) Area pelayanan yang patut dieksplorasi (bukan penempatan final)."],
-  "growthSuggestions": ["(array of string, 3 item) Saran pertumbuhan."],
-  "reflectionQuestions": ["(array of string, 3-4 item) Pertanyaan refleksi."]
+OUTPUT JSON:
+{"summary":"≤60 kata","strengths":["3 item"],"ministryRecommendations":["3 item peran hidup/gereja"],"growthSuggestions":["3 item"],"reflectionQuestions":["3 item"]}`;
 }
 
-PENTING: Output HARUS berupa JSON valid saja. Semua field wajib ada. Setiap item array harus berupa string.`;
+export function buildCallingPrompt(
+  profile: ShapeProfileData,
+  stories: StoryAnswer[] = [],
+): string {
+  return `${SHARED_RULES}
+Tujuan: arah hidup (gereja+kerja+keluarga), eksperimen konkret.
+
+DATA:
+${JSON.stringify(compactProfile(profile))}
+CERITA:
+${compactStories(stories)}
+
+OUTPUT JSON:
+{"designSummary":"≤60 kata","callingClusters":["3 arah"],"environmentalFit":["3 lingkungan"],"lifePatternInsight":"≤60 kata dari cerita+skor","reflectionQuestions":["3 item"],"developmentPath":["3 eksperimen 4-12 minggu"]}`;
+}
+
+export function buildFullReportPrompt(
+  profile: ShapeProfileData,
+  stories: StoryAnswer[] = [],
+): string {
+  return `${SHARED_RULES}
+Tujuan: satu laporan SHAPE (insight + arah panggilan).
+
+DATA:
+${JSON.stringify(compactProfile(profile))}
+CERITA:
+${compactStories(stories)}
+
+OUTPUT JSON:
+{"insight":{"summary":"≤60 kata","strengths":["3"],"ministryRecommendations":["3"],"growthSuggestions":["3"],"reflectionQuestions":["3"]},"calling":{"designSummary":"≤60 kata","callingClusters":["3"],"environmentalFit":["3"],"lifePatternInsight":"≤60 kata","reflectionQuestions":["3"],"developmentPath":["3 eksperimen 4-12 minggu"]}}`;
 }

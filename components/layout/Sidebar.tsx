@@ -113,7 +113,10 @@ export function Sidebar({ role, currentPath }: SidebarProps) {
             </p>
             {churchLinks.map((link) => {
               const Icon = link.icon;
-              const isActive = currentPath === link.href;
+              const isActive =
+                currentPath === link.href ||
+                (link.href !== "/church/dashboard" &&
+                  currentPath.startsWith(link.href));
               return (
                 <Link
                   key={link.href}

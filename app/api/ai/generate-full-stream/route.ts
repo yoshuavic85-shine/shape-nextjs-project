@@ -1,268 +1,59 @@
-import { NextRequest } from "next/server";
-import { db } from "@/lib/db";
+import { after, NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { generateWithRetry } from "@/lib/ai/ollama";
-import { buildAnalysisPrompt } from "@/lib/ai/analysis-prompt";
-import { buildCallingPrompt } from "@/lib/ai/calling-prompt";
-import { toShapeProfileData } from "@/lib/profile-mapper";
-import { Prisma } from "@prisma/client";
-import { AiInsightSchema, CallingProfileSchema } from "@/lib/ai/schemas";
+import { loadAuthorizedAssessment } from "@/lib/access";
+import { enqueueAiJob, processAiJob } from "@/lib/ai/jobs";
 
 export const maxDuration = 300;
 
-function sendSSE(
-  controller: ReadableStreamDefaultController<Uint8Array>,
-  data: object,
-): boolean {
-  try {
-    controller.enqueue(
-      new TextEncoder().encode(`data: ${JSON.stringify(data)}\n\n`),
-    );
-    return true;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const code = err && typeof (err as { code?: string }).code === "string" ? (err as { code: string }).code : "";
-    if (msg.includes("closed") || code === "ERR_INVALID_STATE") {
-      return false;
-    }
-    throw err;
-  }
-}
-
+/**
+ * POST /api/ai/generate-full-stream
+ * Kept for older clients. No longer streams — enqueues a job and returns JSON.
+ */
 export async function POST(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), {
-      status: 401,
-    });
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let body: { assessmentId?: string };
+  let body: { assessmentId?: string; force?: boolean };
   try {
     body = await request.json();
   } catch {
-    return new Response(
-      JSON.stringify({ error: "assessmentId wajib diisi" }),
+    return NextResponse.json(
+      { error: "assessmentId wajib diisi" },
       { status: 400 },
     );
   }
 
-  const { assessmentId } = body;
+  const { assessmentId, force } = body;
   if (!assessmentId) {
-    return new Response(JSON.stringify({ error: "assessmentId wajib diisi" }), {
-      status: 400,
-    });
+    return NextResponse.json(
+      { error: "assessmentId wajib diisi" },
+      { status: 400 },
+    );
   }
 
-  const assessment = await db.assessment.findFirst({
-    where:
-      user.role === "ADMIN"
-        ? { id: assessmentId }
-        : { id: assessmentId, userId: user.id },
-    include: {
-      shapeProfile: true,
-      aiInsight: true,
-      callingProfile: true,
-    },
-  });
-
-  if (!assessment) {
-    return new Response(
-      JSON.stringify({ error: "Assessment tidak ditemukan" }),
+  const access = await loadAuthorizedAssessment(assessmentId, user);
+  if (!access) {
+    return NextResponse.json(
+      { error: "Assessment tidak ditemukan" },
       { status: 404 },
     );
   }
 
-  if (!assessment.shapeProfile) {
-    return new Response(
-      JSON.stringify({
-        error:
-          "Profil SHAPE belum tersedia. Silakan selesaikan assessment terlebih dahulu.",
-      }),
-      { status: 400 },
-    );
+  try {
+    const { job, alreadyDone } = await enqueueAiJob(assessmentId, { force });
+    if (!alreadyDone && (job.status === "PENDING" || job.status === "PROCESSING")) {
+      after(() => processAiJob(job.id));
+    }
+    return NextResponse.json({
+      jobId: job.id,
+      status: alreadyDone ? "COMPLETED" : job.status,
+      alreadyDone,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Gagal membuat job AI.";
+    return NextResponse.json({ error: message }, { status: 400 });
   }
-
-  const profileData = toShapeProfileData(assessment.shapeProfile);
-
-  const stream = new ReadableStream<Uint8Array>({
-    async start(controller) {
-      try {
-        // Idempotent: return existing insights if already generated
-        if (assessment.aiInsight && assessment.callingProfile) {
-          sendSSE(controller, {
-            phase: "done",
-            progress: 100,
-            label: "Analisis sudah tersedia.",
-            aiInsight: {
-              summary: assessment.aiInsight.summary,
-              strengths: assessment.aiInsight.strengths,
-              ministryRecommendations:
-                assessment.aiInsight.ministryRecommendations,
-              growthSuggestions: assessment.aiInsight.growthSuggestions,
-              reflectionQuestions: assessment.aiInsight.reflectionQuestions,
-            },
-            callingProfile: {
-              designSummary: assessment.callingProfile.designSummary,
-              callingClusters: assessment.callingProfile.callingClusters,
-              environmentalFit: assessment.callingProfile.environmentalFit,
-              lifePatternInsight:
-                assessment.callingProfile.lifePatternInsight,
-              reflectionQuestions:
-                assessment.callingProfile.reflectionQuestions,
-              developmentPath: assessment.callingProfile.developmentPath,
-            },
-          });
-          controller.close();
-          return;
-        }
-
-        // Phase 1 & 2: Menganalisis & Membuat Arah Panggilan secara PARALEL (Chunking)
-        sendSSE(controller, {
-          phase: "analyze",
-          status: "started",
-          progress: 10,
-          label: "AI sedang menyusun Analisis SHAPE dan Arah Panggilan secara bersamaan (Paralel)...",
-        });
-
-        // Jalankan kedua request berat secara bersamaan agar waktu selesai 2x lebih cepat
-        const [analysisResult, callingResult] = await Promise.all([
-          generateWithRetry(
-            buildAnalysisPrompt(profileData),
-            AiInsightSchema,
-            { maxTokens: 2000 },
-          ),
-          generateWithRetry(
-            buildCallingPrompt(profileData),
-            CallingProfileSchema,
-            { maxTokens: 2000 },
-          )
-        ]);
-
-        sendSSE(controller, {
-          phase: "analyze",
-          status: "done",
-          progress: 80,
-          label: "Semua analisis AI selesai! Menyimpan data...",
-        });
-
-        // Phase 3: Save to DB
-        const parsedAnalysis = analysisResult.data;
-        const parsedCalling = callingResult.data;
-
-        const [aiInsight, callingProfile] = await Promise.all([
-          db.aiInsight.upsert({
-            where: { assessmentId },
-            update: {
-              summary: parsedAnalysis.summary,
-              strengths:
-                parsedAnalysis.strengths as unknown as Prisma.InputJsonValue,
-              ministryRecommendations:
-                parsedAnalysis.ministryRecommendations as unknown as Prisma.InputJsonValue,
-              growthSuggestions:
-                parsedAnalysis.growthSuggestions as unknown as Prisma.InputJsonValue,
-              reflectionQuestions:
-                parsedAnalysis.reflectionQuestions as unknown as Prisma.InputJsonValue,
-              rawResponse: analysisResult.rawResponse,
-            },
-            create: {
-              assessmentId,
-              summary: parsedAnalysis.summary,
-              strengths:
-                parsedAnalysis.strengths as unknown as Prisma.InputJsonValue,
-              ministryRecommendations:
-                parsedAnalysis.ministryRecommendations as unknown as Prisma.InputJsonValue,
-              growthSuggestions:
-                parsedAnalysis.growthSuggestions as unknown as Prisma.InputJsonValue,
-              reflectionQuestions:
-                parsedAnalysis.reflectionQuestions as unknown as Prisma.InputJsonValue,
-              rawResponse: analysisResult.rawResponse,
-            },
-          }),
-          db.callingProfile.upsert({
-            where: { assessmentId },
-            update: {
-              designSummary: parsedCalling.designSummary,
-              callingClusters:
-                parsedCalling.callingClusters as unknown as Prisma.InputJsonValue,
-              environmentalFit:
-                parsedCalling.environmentalFit as unknown as Prisma.InputJsonValue,
-              lifePatternInsight: parsedCalling.lifePatternInsight,
-              reflectionQuestions:
-                parsedCalling.reflectionQuestions as unknown as Prisma.InputJsonValue,
-              developmentPath:
-                parsedCalling.developmentPath as unknown as Prisma.InputJsonValue,
-              rawResponse: callingResult.rawResponse,
-            },
-            create: {
-              assessmentId,
-              designSummary: parsedCalling.designSummary,
-              callingClusters:
-                parsedCalling.callingClusters as unknown as Prisma.InputJsonValue,
-              environmentalFit:
-                parsedCalling.environmentalFit as unknown as Prisma.InputJsonValue,
-              lifePatternInsight: parsedCalling.lifePatternInsight,
-              reflectionQuestions:
-                parsedCalling.reflectionQuestions as unknown as Prisma.InputJsonValue,
-              developmentPath:
-                parsedCalling.developmentPath as unknown as Prisma.InputJsonValue,
-              rawResponse: callingResult.rawResponse,
-            },
-          }),
-        ]);
-
-        await db.assessment.update({
-          where: { id: assessmentId },
-          data: { status: "ANALYZED" },
-        });
-
-        sendSSE(controller, {
-          phase: "done",
-          progress: 100,
-          label: "Selesai.",
-          aiInsight: {
-            summary: aiInsight.summary,
-            strengths: aiInsight.strengths,
-            ministryRecommendations: aiInsight.ministryRecommendations,
-            growthSuggestions: aiInsight.growthSuggestions,
-            reflectionQuestions: aiInsight.reflectionQuestions,
-          },
-          callingProfile: {
-            designSummary: callingProfile.designSummary,
-            callingClusters: callingProfile.callingClusters,
-            environmentalFit: callingProfile.environmentalFit,
-            lifePatternInsight: callingProfile.lifePatternInsight,
-            reflectionQuestions: callingProfile.reflectionQuestions,
-            developmentPath: callingProfile.developmentPath,
-          },
-        });
-      } catch (err) {
-        console.error("AI generate-full-stream error:", err);
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Gagal menghasilkan insight AI. Silakan coba lagi.";
-        sendSSE(controller, {
-          phase: "error",
-          progress: 0,
-          label: "Gagal",
-          message,
-        });
-      } finally {
-        try {
-          controller.close();
-        } catch {
-          // Stream mungkin sudah ditutup (client putus)
-        }
-      }
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-store, no-cache",
-      Connection: "keep-alive",
-    },
-  });
 }

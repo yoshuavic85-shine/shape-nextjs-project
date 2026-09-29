@@ -6,7 +6,17 @@ import {
   toShapeProfileData,
   toShapeProfileJson,
 } from "@/lib/profile-mapper";
+import { canViewAssessment, canMentorAssessment } from "@/lib/access";
 import { ReportClient } from "./report-client";
+
+const reportInclude = {
+  shapeProfile: true,
+  aiInsight: true,
+  callingProfile: true,
+  openEnded: true,
+  responses: { include: { question: true } },
+  user: { select: { id: true, name: true, email: true, churchId: true } },
+} as const;
 
 export default async function ReportPage({
   params,
@@ -17,24 +27,19 @@ export default async function ReportPage({
   if (!user) redirect("/login");
 
   const { id } = await params;
-  const isAdmin = user.role === "ADMIN";
 
   let assessment = await db.assessment.findFirst({
-    where: isAdmin ? { id } : { id, userId: user.id },
-    include: {
-      shapeProfile: true,
-      aiInsight: true,
-      callingProfile: true,
-      responses: { include: { question: true } },
-      user: { select: { id: true, name: true, email: true } },
-    },
+    where: { id },
+    include: reportInclude,
   });
 
-  if (!assessment) redirect(isAdmin ? "/admin/reports" : "/dashboard");
+  if (!assessment || !canViewAssessment(user, assessment)) {
+    redirect(user.role === "ADMIN" ? "/admin/reports" : "/dashboard");
+  }
 
   if (assessment.status === "IN_PROGRESS") {
-    if (isAdmin && assessment.userId !== user.id) {
-      redirect("/admin/reports");
+    if (assessment.userId !== user.id) {
+      redirect(user.role === "LEADER" ? "/church/members" : "/dashboard");
     }
     redirect(`/dashboard/assessment/${id}`);
   }
@@ -48,14 +53,8 @@ export default async function ReportPage({
       },
     });
     assessment = (await db.assessment.findFirst({
-      where: isAdmin ? { id } : { id, userId: user.id },
-      include: {
-        shapeProfile: true,
-        aiInsight: true,
-        callingProfile: true,
-        responses: { include: { question: true } },
-        user: { select: { id: true, name: true, email: true } },
-      },
+      where: { id },
+      include: reportInclude,
     }))!;
   }
 
@@ -92,6 +91,21 @@ export default async function ReportPage({
     : null;
 
   const isOwner = assessment.userId === user.id;
+  const canMentor = canMentorAssessment(user, assessment);
+
+  const siblings = await db.assessment.findMany({
+    where: {
+      userId: assessment.userId,
+      status: { in: ["COMPLETED", "ANALYZED"] },
+    },
+    select: { id: true, createdAt: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const other = siblings.filter((s) => s.id !== id);
+  const compareHref =
+    other.length > 0
+      ? `/dashboard/compare?a=${siblings[0].id}&b=${siblings[siblings.length - 1].id}`
+      : null;
 
   return (
     <ReportClient
@@ -100,7 +114,14 @@ export default async function ReportPage({
       aiInsight={aiInsight}
       callingProfile={callingProfile}
       autoGenerate={isOwner}
-      subjectName={isAdmin && !isOwner ? assessment.user.name : null}
+      subjectName={!isOwner ? assessment.user.name : null}
+      stories={assessment.openEnded.map((s) => ({
+        promptKey: s.promptKey,
+        text: s.text,
+      }))}
+      canMentor={canMentor}
+      isOwner={isOwner}
+      compareHref={compareHref}
     />
   );
 }

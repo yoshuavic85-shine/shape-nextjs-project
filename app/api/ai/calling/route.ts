@@ -3,7 +3,9 @@ import { db } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth";
 import { generateWithRetry } from "@/lib/ai/ollama";
 import { buildCallingPrompt } from "@/lib/ai/calling-prompt";
+import { loadStories } from "@/lib/ai/load-stories";
 import { toShapeProfileData } from "@/lib/profile-mapper";
+import { loadAuthorizedAssessment } from "@/lib/access";
 import { CallingProfileSchema } from "@/lib/ai/schemas";
 
 export async function POST(request: NextRequest) {
@@ -23,8 +25,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const assessment = await db.assessment.findFirst({
-      where: { id: assessmentId, userId: user.id },
+    const access = await loadAuthorizedAssessment(assessmentId, user);
+    if (!access) {
+      return NextResponse.json(
+        { error: "Assessment tidak ditemukan" },
+        { status: 404 },
+      );
+    }
+
+    const assessment = await db.assessment.findUnique({
+      where: { id: assessmentId },
       include: { shapeProfile: true },
     });
 
@@ -43,8 +53,9 @@ export async function POST(request: NextRequest) {
     }
 
     const profileData = toShapeProfileData(assessment.shapeProfile);
+    const stories = await loadStories(assessmentId);
 
-    const prompt = buildCallingPrompt(profileData);
+    const prompt = buildCallingPrompt(profileData, stories);
     const { data: validated, rawResponse } = await generateWithRetry(
       prompt,
       CallingProfileSchema,

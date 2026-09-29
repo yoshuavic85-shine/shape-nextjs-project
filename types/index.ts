@@ -63,11 +63,15 @@ export interface CategoryScore {
 }
 
 export interface SectionScoreBlock {
-  /** Ipsative-mapped display scores (≈1–5) for charts */
+  /** Absolute display scores (raw means, 1–5) for charts */
   scores: Record<string, number>;
   /** Raw means after reverse-key scoring */
   rawMeans?: Record<string, number>;
   top: CategoryScore[];
+  /** True when within-person spread is too small to rank meaningfully */
+  undifferentiated?: boolean;
+  /** Largest absolute ipsative deviation in this section */
+  maxIpsative?: number;
 }
 
 export interface ProfileQuality {
@@ -78,6 +82,7 @@ export interface ProfileQuality {
   overallConfidence: ConfidenceLevel;
   meanItemConsistency: number;
   itemsPerCategory: number;
+  undifferentiatedSections?: string[];
   disclaimer: string;
 }
 
@@ -164,7 +169,7 @@ export const SECTION_CONFIGS: SectionConfig[] = [
     title: "Pengalaman",
     description: "Refleksikan pengalaman hidup yang membentuk Anda",
     icon: "BookOpen",
-    questionCount: 20,
+    questionCount: 21,
   },
 ];
 

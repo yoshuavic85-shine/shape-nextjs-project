@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { ShapeProfileData } from "@/types";
 import { formatDate, getInitials } from "@/lib/utils";
@@ -49,7 +50,8 @@ export default async function ChurchMembersPage() {
             : null;
 
           return (
-            <Card key={member.id}>
+            <Link key={member.id} href={`/church/members/${member.id}`}>
+            <Card className="h-full hover:border-primary/40 transition-colors">
               <CardContent className="py-5">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-full neo-raised flex items-center justify-center text-sm font-bold text-primary">
@@ -98,7 +100,8 @@ export default async function ChurchMembersPage() {
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground mt-2">
-                      Selesai {formatDate(latestAssessment.updatedAt)}
+                      Selesai {formatDate(latestAssessment.updatedAt)} · buka
+                      laporan
                     </p>
                   </div>
                 ) : (
@@ -108,6 +111,7 @@ export default async function ChurchMembersPage() {
                 )}
               </CardContent>
             </Card>
+            </Link>
           );
         })}
       </div>

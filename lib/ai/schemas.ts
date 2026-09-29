@@ -44,6 +44,37 @@ export const CallingProfileSchema = z.object({
 
 export type CallingProfileDTO = z.infer<typeof CallingProfileSchema>;
 
+export const FullReportSchema = z.preprocess((val) => {
+  if (!val || typeof val !== "object") return val;
+  const o = val as Record<string, unknown>;
+  if (o.insight && o.calling) return o;
+  if (typeof o.summary === "string" && typeof o.designSummary === "string") {
+    return {
+      insight: {
+        summary: o.summary,
+        strengths: o.strengths,
+        ministryRecommendations: o.ministryRecommendations,
+        growthSuggestions: o.growthSuggestions,
+        reflectionQuestions: o.reflectionQuestions,
+      },
+      calling: {
+        designSummary: o.designSummary,
+        callingClusters: o.callingClusters,
+        environmentalFit: o.environmentalFit,
+        lifePatternInsight: o.lifePatternInsight,
+        reflectionQuestions: o.callingReflectionQuestions ?? o.reflectionQuestions,
+        developmentPath: o.developmentPath,
+      },
+    };
+  }
+  return o;
+}, z.object({
+  insight: AiInsightSchema,
+  calling: CallingProfileSchema,
+}));
+
+export type FullReportDTO = z.infer<typeof FullReportSchema>;
+
 export const SectionInsightSchema = z.object({
   summary: z.string().default("Insight tidak tersedia."),
   strengths: stringArrayPreprocess,

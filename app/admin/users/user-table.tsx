@@ -11,7 +11,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Search, UserCog, Trash2, MoreHorizontal, Sparkles, KeyRound } from "lucide-react";
+import { Search, UserCog, Trash2, MoreHorizontal, Sparkles, KeyRound, FileText } from "lucide-react";
+import Link from "next/link";
 
 interface User {
   id: string;
@@ -258,11 +259,30 @@ export function UserTable({ users, churches }: UserTableProps) {
                     ))}
                   </select>
                 </td>
-                <td className="py-3 px-2 text-sm text-center">
-                  {user._count.assessments}
+                <td className="py-3 px-2 text-sm">
+                  {user._count.assessments > 0 ? (
+                    <Link
+                      href={`/admin/users/${user.id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {user._count.assessments} · lihat hasil
+                    </Link>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
                 </td>
                 <td className="py-3 px-2">
                   <div className="flex items-center gap-1">
+                    <Link href={`/admin/users/${user.id}`}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        title="Baca hasil SHAPE"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </Button>
+                    </Link>
                     <Button
                       variant="ghost"
                       size="sm"
