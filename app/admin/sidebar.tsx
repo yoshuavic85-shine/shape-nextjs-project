@@ -9,6 +9,7 @@ import {
   Users,
   Church,
   BarChart3,
+  UsersRound,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -29,6 +30,7 @@ const adminLinks = [
   { href: "/admin/churches", label: "Manajemen Gereja", icon: Church },
   { href: "/admin/reports", label: "Laporan Assessment", icon: FileText },
   { href: "/admin/analytics", label: "Analitik Sistem", icon: BarChart3 },
+  { href: "/admin/placement", label: "Penempatan Pelayanan", icon: UsersRound },
   { href: "/admin/activity", label: "Log Aktivitas", icon: Activity },
   { href: "/admin/settings", label: "Pengaturan", icon: Settings },
 ];

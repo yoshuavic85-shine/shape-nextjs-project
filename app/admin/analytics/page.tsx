@@ -262,8 +262,11 @@ export default async function AdminAnalyticsPage() {
           Analitik Sistem
         </h1>
         <p className="text-muted-foreground mt-1">
-          Rekap profil SHAPE per gereja atau per batch. Untuk membaca hasil
-          seorang user, buka{" "}
+          Rekap profil SHAPE per gereja atau per batch. Usulan peran ada di{" "}
+          <Link href="/admin/placement" className="text-primary underline">
+            Penempatan Pelayanan
+          </Link>
+          . Untuk membaca hasil seorang user, buka{" "}
           <Link href="/admin/reports" className="text-primary underline">
             Laporan Assessment
           </Link>{" "}
